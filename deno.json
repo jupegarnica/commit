@@ -1,0 +1,10 @@
+{
+    "lock": false,
+    "tasks": {
+        "install": "curl https://ollama.ai/install.sh | sh",
+        "start": "ollama run llama2",
+        "stop": "ollama stop",
+        "restart": "ollama restart",
+        "run": "deno run -A run.js"
+    }
+}
