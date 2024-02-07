@@ -1,3 +1,3 @@
 # ollama
 
-https://ollama.ai/library/llama2
+https://ollama.ai/library
