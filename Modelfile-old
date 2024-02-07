@@ -38,3 +38,283 @@ docs: explain hat wobble
 
 test(file): change the file to test the new feature
 """
+
+MESSAGE user """diff --git "a/frontend/components/Dashboard/GraphBarTecnologiasA\303\261osPorcentaje/GraphBarTecnologiasA\303\261osPorcentaje.component.tsx" "b/frontend/components/Dashboard/GraphBarTecnologiasA\303\261osPorcentaje/GraphBarTecnologiasA\303\261osPorcentaje.component.tsx"
+index 2a1ca279..7e175026 100644
+--- "a/frontend/components/Dashboard/GraphBarTecnologiasA\303\261osPorcentaje/GraphBarTecnologiasA\303\261osPorcentaje.component.tsx"
++++ "b/frontend/components/Dashboard/GraphBarTecnologiasA\303\261osPorcentaje/GraphBarTecnologiasA\303\261osPorcentaje.component.tsx"
+@@ -5,7 +5,7 @@ import GraphBarNivelesAñosComponent from './GraphBarTecnologiasAñosPorcentaje.
+ import { mockData } from './GraphBarTecnologiasAñosPorcentaje.mock';
+ import FakeGraphHoverComponent from '../FakeGraphHover/FakeGraphHover.component';
+
+-export default function GraphBarTecnologiasAñosPorcentaje({h2='% de validaciones: Niveles / Años de experiencia', link = true }) {
++export default function GraphBarTecnologiasAñosPorcentaje({h2='% de validaciones: Tecnología / Años de experiencia', link = true }) {
+
+   const {
+     loading,
+"""
+
+MESSAGE assistant """feat: change the title of the graph"""
+MESSAGE user """diff --git a/backend/src/modules/companies/companies.controller.ts b/backend/src/modules/companies/companies.controller.ts
+index f04828c9..a11f7257 100644
+--- a/backend/src/modules/companies/companies.controller.ts
++++ b/backend/src/modules/companies/companies.controller.ts
+@@ -1,4 +1,4 @@
+-import { CompanyDTO, InvitationsDTO } from "shared/types/company.type";
++import { CompanyDTO, CompanyRegisterByAdminDTO, InvitationsDTO } from "shared/types/company.type";
+ import { sendCompanyInvitations, sendCompanyWelcome } from "../../services/mailer.service";
+ import { invitationSchema, companyUserRegisterSchema, companyUpdateSchema, updateCompanyEmployeeSchema } from "./companies.validation";
+ import { CompanyRegisterDTO } from "shared/types/company.type";
+@@ -46,6 +46,7 @@ import { getDeveloperByAdmin } from "../developers/services/get.developers.servi
+ import { updateDeveloperCategoryService } from "../developers/services/update.developers.service";
+
+ import { deleteUserByIdService } from "../users/users.service";
++import { UserDTO } from "shared/types/user.type";
+
+ export async function registerCompany(ctx) {
+   const companyOwner = ctx.request.body as CompanyRegisterDTO;
+@@ -90,7 +91,7 @@ export async function registerCompany(ctx) {
+   }
+
+   const loginUser = await createJwt(user);
+-
++
+   await sendCompanyWelcome(user.company_user.company.name, user.email);
+
+   ctx.body = loginUser;
+@@ -404,7 +405,7 @@ export async function deleteCompany(ctx) {
+
+     //Delete company to true
+     await deleteCompanyFlagService(companyId, tx);
+-
++
+     //Delete invitations
+     await deleteCompanyInvitationsService(companyId, tx);
+
+@@ -418,6 +419,64 @@ export async function deleteCompany(ctx) {
+     ctx.throw(400, 'Error al eliminar la empresa');
+     return;
+   });
+-
++
+   ctx.status = 200;
+ }
++
++
++export async function createCompanyByAdmin(ctx) {
++
++  const body: CompanyRegisterByAdminDTO  = ctx.request.body;
++
++  const password = Math.random().toString(36).slice(-8);
++
++  const companyOwner: CompanyRegisterDTO = {
++    ...body,
++    password
++  };
++
++
++  const {error} = companyUserRegisterSchema.validate(companyOwner);
++  if (error) {
++    console.error(error);
++    ctx.throw(400, error.details);
++    return;
++  }
++  let user: UserDTO;
++
++  try {
++    user = await createCompanyService(companyOwner);
++  } catch (error) {
++    const isEmailError = error.meta?.target?.includes('email');
++    const isDomainError = error.meta?.target?.includes('domain');
++    if (isEmailError) {
++      return ctx.throw(422, 'Email en uso: '+companyOwner.email);
++    } else if (isDomainError) {
++      const domain = companyOwner.email.split('@')[1];
++      return ctx.throw(422, 'Dominio en uso: ' + domain);
++    } else {
++      throw error;
++    }
++
++  }
++
++  //Create stripe customer and assign free plan
++  try {
++    //Create customer in stripe
++    const customerStripeId = await createStripeCustomerService(companyOwner.company_name, user.company_user.company.id, user.email);
++    //Create subscription in stripe
++    await createStripeSubscriptionService(customerStripeId, process.env.STRIPE_PLAN_0);
++  } catch (error) {
++    console.error(error);
++    await deleteUserByIdService(user.id);
++    await deleteCompanyService(user.company_user.company.id);
++    return ctx.throw(500, 'Error al crear la empresa en STRIPE');
++  }
++
++  // TODO send email with password
++
++  ctx.body = {user};
++  ctx.status = 200;
++
++
++}
+diff --git a/backend/src/router.ts b/backend/src/router.ts
+index 6ee60f27..1e305904 100755
+--- a/backend/src/router.ts
++++ b/backend/src/router.ts
+@@ -136,4 +136,8 @@ router.post('/webhook/typeform/candidate', syncController.syncWebhookTypeFormCan
+ router.post('/webhook/typeform/jobs', syncController.syncWebhookTypeFormJobs);
+ router.post('/webhook/manatal/candidate',  syncController.syncWebhookManatal);
+
++
++// sourcing
++router.post('/admin/company', jwtMiddleware, (ctx, next) => roleUserMiddleware(ctx, next, ['Admin']), companiesController.createCompanyBy
+Admin);
++
+ export default router;
+diff --git a/shared/types/company.type.ts b/shared/types/company.type.ts
+index c6b6fe27..8fac0b5a 100644
+--- a/shared/types/company.type.ts
++++ b/shared/types/company.type.ts
+@@ -51,6 +51,8 @@ export type CompanyRegisterDTO = {
+
+ }
+
++export type CompanyRegisterByAdminDTO = Omit<CompanyRegisterDTO, 'password'>
++
+ export type CompanyPaymentDTO = {
+   plan?: number,
+   card_name?: string,
+diff --git a/tests/tepi/14_sourcing.http b/tests/tepi/14_sourcing.http
+new file mode 100644
+index 00000000..69909035
+--- /dev/null
++++ b/tests/tepi/14_sourcing.http
+@@ -0,0 +1,118 @@
++---
++host: <%= Deno.env.get('API_HOST') || 'http://localhost:8000' %>
++hostMaildev: <%= Deno.env.get('MAILDEV_HOST') || 'http://localhost:1080' %>
++password: o4ia5hsd6lhasl_kdjhas
++<% let rnd = Date.now().toString();  %>
++<% let random = rnd.substring(0, rnd.length - 4)  %>
++random: <%= random  %>
++randomEmail: <%= `${random}-company-owner@comp-${random}.com` %>
++randomEmailDomain: <%= `comp-${random}.com` %>
++randonEmailGeekup: <%= random %>@geekup.es
++---
++
++###
++---
++id: register company by admin 401 if not is admin
++---
++
++POST /admin/company
++Content-Type: application/json
++
++
++HTTP/1.1 401
++
++###
++---
++id: login admin
++---
++POST /auth/login
++Content-Type: application/json
++
++{
++  "email":"admin@geekup.es",
++  "password": "o4ia5hsd6lhasl_kdjhas"
++}
++
++HTTP/1.1 201 Created
++<% globalThis.jwtAdmin = body.access_token;%>
++###
++---
++id: register company by admin 400 if not valid data
++---
++
++POST /admin/company
++Content-Type: application/json
++Authorization: Bearer <%= jwtAdmin %>
++
++{
++  "name": "my name"
++}
++
++HTTP/1.1 400
++
++###
++
++---
++id: register company by admin dominio en uso
++needs: login admin
++---
++
++POST /admin/company
++Content-Type: application/json
++Authorization: Bearer <%= jwtAdmin %>
++
++  {
++    "name": "use name test",
++    "surname": "use surname test",
++    "company_name": "Geekup",
++    "email": "<%= meta.randonEmailGeekup %>"
++  }
++
++HTTP/1.1 422
++Content-Type: text/plain; charset=utf-8
++
++Dominio en uso: geekup.es
++
++###
++
++---
++id: register company by admin email in use
++needs: login admin
++---
++
++POST /admin/company
++Content-Type: application/json
++Authorization: Bearer <%= jwtAdmin %>
++
++  {
++    "name": "use name test",
++    "surname": "use surname test",
++    "company_name": "TEST",
++    "email": "juan@geekshubs.com"
++  }
++
++HTTP/1.1 422
++Content-Type: text/plain; charset=utf-8
++
++Email en uso: juan@geekshubs.com
++
++
++###
++
++---
++id: register company by admin 201
++needs: login admin
++---
++
++POST /admin/company
++Content-Type: application/json
++Authorization: Bearer <%= jwtAdmin %>
++
++  {
++    "name": "use name test",
++    "surname": "use surname test",
++    "company_name": "TEST",
++    "email": "<%= meta.randomEmail %>"
++  }
++
++HTTP/1.1 200
+"""
+
+MESSAGE assistant """feat(companies): add createCompanyByAdmin functionality and UserDTO import
+
+    - Import UserDTO in companies.controller.ts
+    - Add createCompanyByAdmin function in companies.controller.ts
+    - Add CompanyRegisterByAdminDTO type in company.type.ts
+    - Add route for admin to create company in router.ts
+    - Include tests for new admin company creation feature
+"""
