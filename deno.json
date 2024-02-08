@@ -1,0 +1,7 @@
+{
+    "lock": false,
+    "tasks": {
+        "install": "deno install -A -fn gpt  gpt.ts",
+        "dev": "deno run -A gpt.ts",
+    }
+}
