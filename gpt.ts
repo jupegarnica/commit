@@ -4,6 +4,16 @@ const openai = new OpenAI({
     apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
 });
 
+let content = Deno.args.join(' ') + '\n';
+if (!Deno.stdin.isTerminal()) {
+    const decoder = new TextDecoder();
+    for await (const chunk of Deno.stdin.readable) {
+        content += decoder.decode(chunk);
+        console.log(content);
+    }
+}
+
+
 
 const chatCompletion = await openai.chat.completions.create({
     model: "gpt-4-turbo-preview",
@@ -14,7 +24,7 @@ const chatCompletion = await openai.chat.completions.create({
         },
         {
             role: "user",
-            content: Deno.args.join('')
+            content
         }
     ],
     temperature: 0,
