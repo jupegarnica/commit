@@ -1,7 +1,7 @@
 import OpenAI from 'npm:openai';
 
 const openai = new OpenAI({
-    apiKey: Deno.env.get('OCO_OPENAI_API_KEY'), // This is the default and can be omitted
+    apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
 });
 
 
@@ -21,8 +21,8 @@ const chatCompletion = await openai.chat.completions.create({
     stream: false,
 });
 const response = chatCompletion.choices[0].message.content;
-const model = chatCompletion.model;
 
-console.error(model);
+// const model = chatCompletion.model;
+//console.error(model);
 
 console.log(response);
