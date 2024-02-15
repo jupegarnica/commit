@@ -9,7 +9,6 @@ if (!Deno.stdin.isTerminal()) {
     const decoder = new TextDecoder();
     for await (const chunk of Deno.stdin.readable) {
         content += decoder.decode(chunk);
-        console.log(content);
     }
 }
 
