@@ -1,4 +1,5 @@
 import OpenAI from 'npm:openai';
+const MAX_TOKENS = 2048;
 
 const openai = new OpenAI({
     apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
@@ -12,6 +13,13 @@ if (!Deno.stdin.isTerminal()) {
     }
 }
 
+
+const words = content.split(' ').length;
+// console.warn({ words });
+if (words > MAX_TOKENS) {
+    console.error(`Input is too long: ${words} words`);
+    Deno.exit(1);
+}
 
 
 const chatCompletion = await openai.chat.completions.create({
