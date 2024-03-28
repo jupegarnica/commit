@@ -39,6 +39,10 @@ const chatCompletion = await openai.chat.completions.create({
 });
 const response = chatCompletion.choices[0].message.content;
 
+if (!response) {
+    console.error('No response');
+    Deno.exit(1);
+}
 // const model = chatCompletion.model;
 //console.error(model);
 
