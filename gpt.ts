@@ -1,5 +1,5 @@
 import OpenAI from 'npm:openai';
-const MAX_TOKENS = 2048;
+const MAX_TOKENS = 5_000;
 
 const openai = new OpenAI({
     apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
