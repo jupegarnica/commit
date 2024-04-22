@@ -2,11 +2,16 @@ import * as mod from "jsr:@david/dax";
 import OpenAI from 'npm:openai';
 const MAX_TOKENS = 6_000;
 
+let debug = false;
 const $ = mod.default;
 
 export async function commit() {
     let model = 'gpt-4-turbo-preview';
     let baseURL: string | undefined = undefined;
+
+    if (Deno.args.includes('--debug')) {
+        debug = true;
+    }
 
     if (Deno.args.includes('--add')) {
         await $`git add .`;
@@ -17,7 +22,9 @@ export async function commit() {
         baseURL = 'http://localhost:11434/v1';
 
     }
-    const diff = await $`git diff --unified=5 --staged -- . ':(exclude)*.lock'`.text();
+    const diff = await $.raw`git diff --unified=5 --staged -- . ':(exclude)*.lock'`.text();
+    debug && console.debug({ diff });
+
     if (!diff) {
         console.error('No changes');
         Deno.exit(1);
@@ -32,7 +39,7 @@ export async function commit() {
 
 
     const words = diff.split(' ').length;
-    // console.warn({ words });
+    debug && console.debug({ words });
     if (words > MAX_TOKENS) {
         console.error(`Input is too long: ${words} words`);
         Deno.exit(1);
@@ -57,14 +64,14 @@ export async function commit() {
     });
     const commitMessage = chatCompletion.choices[0].message.content;
 
+    debug && console.debug({ commitMessage });
     if (!commitMessage) {
         console.error('No commitMessage');
         Deno.exit(1);
     }
 
-    // console.log(commitMessage);
 
-    await $.raw`git commit --edit -m "${commitMessage}"`;
+    await $.raw`git commit --edit -m "${commitMessage.replace(/`/g, "'")}"`;
 
     if (Deno.args.includes('--push')) {
         await $`git push`;
