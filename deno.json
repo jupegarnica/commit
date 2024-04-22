@@ -2,6 +2,7 @@
     "lock": false,
     "tasks": {
         "install": "deno install -A -fn commit  commit.ts",
+        "i:gpt": "deno install -A -fn gpt  gpt.ts",
         "dev": "deno run -A commit.ts",
         "gpt": "deno run -A gpt.ts"
     }
