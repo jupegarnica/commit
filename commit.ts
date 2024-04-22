@@ -62,9 +62,13 @@ export async function commit() {
         Deno.exit(1);
     }
 
+    // console.log(commitMessage);
 
-    console.log(commitMessage);
+    await $.raw`git commit --edit -m "${commitMessage}"`;
 
+    if (Deno.args.includes('--push')) {
+        await $`git push`;
+    }
 
 
 }
