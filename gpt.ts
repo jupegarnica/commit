@@ -1,8 +1,9 @@
 import OpenAI from 'npm:openai';
-const MAX_TOKENS = 5_000;
+const MAX_TOKENS = 6_000;
 
 const openai = new OpenAI({
     apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
+    baseURL: 'http://localhost:11434/v1',
 });
 
 let content = Deno.args.join(' ') + '\n';
@@ -23,7 +24,8 @@ if (words > MAX_TOKENS) {
 
 
 const chatCompletion = await openai.chat.completions.create({
-    model: "gpt-4-turbo-preview",
+    // model: "gpt-4-turbo-preview",
+    model: 'llama3',
     messages: [
         {
             role: "system",
