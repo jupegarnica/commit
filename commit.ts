@@ -3,6 +3,16 @@ import OpenAI from 'npm:openai@4.38.3';
 import { parseArgs } from "jsr:@std/cli@0.223.0"
 
 
+async function dax(strings: TemplateStringsArray, ...values: any[]) {
+
+    try {
+        return await $(strings, ...values);
+    } catch (error) {
+        // console.error(error.message);
+        Deno.exit(1);
+
+    }
+}
 
 
 export async function commit() {
@@ -79,7 +89,7 @@ export async function commit() {
     }
 
 
-    await $.raw`git commit --edit -m "${commitMessage.replace(/`/g, "'")}"`;
+    await dax`git commit --edit -m "${commitMessage.replace(/`/g, "'")}"`;
 
     if (args.push) {
         await $`git push`;
