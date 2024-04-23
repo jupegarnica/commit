@@ -1,4 +1,4 @@
-import $ from "jsr:@david/dax";
+import $ from "jsr:@david/dax@0.40.1";
 import OpenAI from 'npm:openai';
 
 const MAX_TOKENS = 6_000;
