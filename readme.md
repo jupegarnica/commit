@@ -20,8 +20,14 @@ commit [OPTIONS]
 
 - `--add`: Runs `git add .` before creating the commit message.
 - `--push`: Runs `git push` after creating the commit.
-- `--ollama`: Uses the `llama3` model and sets the base URL to 'http://localhost:11434/v1'.
+- `--model <model>`: Specifies the model to use for generating the commit message. The default is `gpt-4-turbo-preview`.
+- `--config`: Ask for the OpenAI API key and save it.
+- `--apiKey <apiKey>`: Specifies the OpenAI API key to use. This will override the value set in the `OPENAI_API_KEY` environment variable.
+- `--baseURL <baseURL>`: Specifies the base URL to use for the OpenAI API. This will override the default base URL.
 - `--debug`: Enables debug mode, which will print additional information to the console.
+- `--maxWords <maxWords>`: Specifies the maximum number of words to call the api. The default is 6000. Is useful to no incur in extra charges.
+- `--ollama`: Uses the `llama3` model and sets the base URL to 'http://localhost:11434/v1'.
+- `--help`: Prints the help message.
 
 ### Environment Variables
 

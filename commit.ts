@@ -1,24 +1,35 @@
 import $ from "jsr:@david/dax@0.40.1";
 import OpenAI from 'npm:openai@4.38.3';
+import { parseArgs } from "jsr:@std/cli@0.223.0"
 
-const MAX_TOKENS = 6_000;
-let debug = false;
+
+
 
 export async function commit() {
-    let model = 'gpt-4-turbo-preview';
+    const args = parseArgs(Deno.args, {
+        boolean: ['add', 'push', 'ollama', 'debug', 'config'],
+        string: ['apiKey', 'model', 'baseURL', 'maxWords'],
+    });
+    const MAX_TOKENS = Number(args.maxWords) || 6_000;
+    let debug = args.debug || false;
+    let model = args.model || 'gpt-4-turbo-preview';
     let baseURL: string | undefined = undefined;
+    let apiKey = args.apiKey || Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
 
-    if (Deno.args.includes('--debug')) {
-        debug = true;
+    if (!apiKey || args.config) {
+        apiKey = await $.prompt('Enter OpenAI API Key or set OPENAI_API_KEY env variable');
+        localStorage.setItem('OPENAI_API_KEY', apiKey);
     }
 
-    if (Deno.args.includes('--add')) {
+
+
+    if (args.add) {
         await $`git add .`;
     }
 
-    if (Deno.args.includes('--ollama')) {
-        model = 'llama3';
-        baseURL = 'http://localhost:11434/v1';
+    if (args.ollama) {
+        model = args.model || 'llama3';
+        baseURL = args.baseURL || 'http://localhost:11434/v1';
 
     }
     const diff = await $.raw`git diff --unified=5 --staged -- . ':(exclude)*.lock'`.text();
@@ -26,12 +37,11 @@ export async function commit() {
 
     if (!diff) {
         console.error('No changes');
-        Deno.exit(1);
-        return;
+        return Deno.exit(1);
     }
 
     const openai = new OpenAI({
-        apiKey: Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY'),
+        apiKey,
         baseURL,
     });
 
@@ -46,7 +56,6 @@ export async function commit() {
 
 
     const chatCompletion = await openai.chat.completions.create({
-        // model: "gpt-4-turbo-preview",
         model,
         messages: [
             {
@@ -72,7 +81,7 @@ export async function commit() {
 
     await $.raw`git commit --edit -m "${commitMessage.replace(/`/g, "'")}"`;
 
-    if (Deno.args.includes('--push')) {
+    if (args.push) {
         await $`git push`;
     }
 
