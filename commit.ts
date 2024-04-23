@@ -15,7 +15,7 @@ async function dax(strings: TemplateStringsArray, ...values: any[]) {
 }
 
 
-export async function commit() {
+export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
         boolean: ['add', 'push', 'ollama', 'debug', 'config'],
         string: ['apiKey', 'model', 'baseURL', 'maxWords'],
