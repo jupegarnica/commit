@@ -31,7 +31,7 @@ export async function commit() {
     }
 
     const openai = new OpenAI({
-        apiKey: Deno.env.get('OCO_OPENAI_API_KEY'),
+        apiKey: Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY'),
         baseURL,
     });
 
