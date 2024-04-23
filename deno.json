@@ -6,7 +6,8 @@
         "i:gpt": "deno install -A -fn gpt  gpt.ts",
         "dev": "deno run -A commit.ts",
         "gpt": "deno run -A gpt.ts",
-        "run": "deno run -A jsr:@garn/commit"
+        "run": "deno run -A jsr:@garn/commit",
+        "publish": "deno publish"
     },
     "name": "@garn/commit",
     "version": "0.0.3",
