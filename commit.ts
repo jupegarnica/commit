@@ -1,9 +1,8 @@
-import * as mod from "jsr:@david/dax";
+import $ from "jsr:@david/dax";
 import OpenAI from 'npm:openai';
 const MAX_TOKENS = 6_000;
 
 let debug = false;
-const $ = mod.default;
 
 export async function commit() {
     let model = 'gpt-4-turbo-preview';
