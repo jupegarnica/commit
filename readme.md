@@ -1,4 +1,4 @@
-# README for commit.ts
+# Commit
 
 ## Requirements
 

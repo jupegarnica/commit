@@ -9,7 +9,7 @@
         "run": "deno run -A jsr:@garn/commit"
     },
     "name": "@garn/commit",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "description": "conventional commit cli by AI",
     "exports": "./commit.ts"
 }
