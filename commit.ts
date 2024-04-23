@@ -1,7 +1,7 @@
 import $ from "jsr:@david/dax";
 import OpenAI from 'npm:openai';
-const MAX_TOKENS = 6_000;
 
+const MAX_TOKENS = 6_000;
 let debug = false;
 
 export async function commit() {

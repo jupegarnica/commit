@@ -5,5 +5,9 @@
         "i:gpt": "deno install -A -fn gpt  gpt.ts",
         "dev": "deno run -A commit.ts",
         "gpt": "deno run -A gpt.ts"
-    }
+    },
+    "name": "@garn/commit",
+    "version": "0.0.1",
+    "description": "conventional commit cli by AI",
+    "exports": "./commit.ts"
 }
