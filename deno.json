@@ -1,10 +1,12 @@
 {
     "lock": false,
     "tasks": {
-        "install": "deno install -A -fn commit  commit.ts",
+        "i:jsr": "deno install -A -fn commit  jsr:@garn/commit",
+        "i": "deno install -A -fn commit  commit.ts",
         "i:gpt": "deno install -A -fn gpt  gpt.ts",
         "dev": "deno run -A commit.ts",
-        "gpt": "deno run -A gpt.ts"
+        "gpt": "deno run -A gpt.ts",
+        "run": "deno run -A jsr:@garn/commit"
     },
     "name": "@garn/commit",
     "version": "0.0.1",
