@@ -6,7 +6,7 @@ import { parseArgs } from "jsr:@std/cli@0.223.0"
 async function dax(strings: TemplateStringsArray, ...values: any[]) {
 
     try {
-        return await $(strings, ...values);
+        return await $.raw(strings, ...values);
     } catch (error) {
         // console.error(error.message);
         Deno.exit(1);
@@ -46,7 +46,7 @@ export async function commit(): Promise<void> {
     debug && console.debug({ diff });
 
     if (!diff) {
-        console.error('No changes');
+        console.error('No staged changes to commit.');
         return Deno.exit(1);
     }
 
@@ -80,8 +80,8 @@ export async function commit(): Promise<void> {
         temperature: 0,
         stream: false,
     });
-    const commitMessage = chatCompletion.choices[0].message.content;
-
+    let commitMessage: string = chatCompletion.choices[0].message.content || "";
+    commitMessage = commitMessage?.trim().replace(/(^['"`]|$['"`])/, "").replace(/`/g, "'");
     debug && console.debug({ commitMessage });
     if (!commitMessage) {
         console.error('No commitMessage');
@@ -89,7 +89,7 @@ export async function commit(): Promise<void> {
     }
 
 
-    await dax`git commit --edit -m "${commitMessage.replace(/`/g, "'")}"`;
+    await dax`git commit --edit -m "${commitMessage}"`;
 
     if (args.push) {
         await $`git push`;
