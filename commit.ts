@@ -46,7 +46,7 @@ export async function commit(): Promise<void> {
     debug && console.debug({ diff });
 
     if (!diff) {
-        console.error('No staged changes to commit. \n Use --add flag to add all changes to commit. or use git add for specific files.');
+        console.error('No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files.');
         return Deno.exit(1);
     }
 
