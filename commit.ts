@@ -70,7 +70,7 @@ export async function commit(): Promise<void> {
         messages: [
             {
                 role: "system",
-                content: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters."
+                content: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
             },
             {
                 role: "user",
