@@ -31,8 +31,6 @@ export async function commit(): Promise<void> {
         localStorage.setItem('OPENAI_API_KEY', apiKey);
     }
 
-
-
     if (args.add) {
         await $`git add .`;
     }
@@ -42,6 +40,7 @@ export async function commit(): Promise<void> {
         baseURL = args.baseURL || 'http://localhost:11434/v1';
 
     }
+    debug && console.debug({ args,  model, baseURL });
     const diff = await $.raw`git diff --unified=5 --staged -- . ':(exclude)*.lock'`.text();
     debug && console.debug({ diff });
 
@@ -88,7 +87,11 @@ export async function commit(): Promise<void> {
         Deno.exit(1);
     }
 
+    if (args.noCommit) {
+        console.log(commitMessage);
+        return;
 
+    }
     await dax`git commit --edit -m "${commitMessage}"`;
 
     if (args.push) {
