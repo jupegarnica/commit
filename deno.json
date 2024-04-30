@@ -10,7 +10,7 @@
         "publish": "deno publish"
     },
     "name": "@garn/commit",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "description": "conventional commit generator cli by AI",
     "exports": "./commit.ts"
 }
