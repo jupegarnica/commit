@@ -20,6 +20,8 @@ commit [OPTIONS]
 
 - `--add`: Runs `git add .` before creating the commit message.
 - `--push`: Runs `git push` after creating the commit.
+- `--skipEdit`: Skips the editing of the commit message before creating the commit.
+- `--noCommit`: Skips the creation of the commit. Just prints the commit message.
 - `--model <model>`: Specifies the model to use for generating the commit message. The default is `gpt-4-turbo-preview`.
 - `--config`: Ask for the OpenAI API key and save it.
 - `--apiKey <apiKey>`: Specifies the OpenAI API key to use. This will override the value set in the `OPENAI_API_KEY` environment variable.

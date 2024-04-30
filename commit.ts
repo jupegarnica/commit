@@ -17,7 +17,7 @@ async function dax(strings: TemplateStringsArray, ...values: any[]) {
 
 export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
-        boolean: ['add', 'push', 'ollama', 'debug', 'config'],
+        boolean: ['add', 'push', 'ollama', 'debug', 'config', 'skipEdit', 'noCommit'],
         string: ['apiKey', 'model', 'baseURL', 'maxWords'],
     });
     const MAX_TOKENS = Number(args.maxWords) || 6_000;
@@ -92,7 +92,8 @@ export async function commit(): Promise<void> {
         return;
 
     }
-    await dax`git commit --edit -m "${commitMessage}"`;
+    const edit = args.skipEdit ? '' : ' --edit';
+    await dax`git commit ${edit} -m "${commitMessage}"`;
 
     if (args.push) {
         await $`git push`;
