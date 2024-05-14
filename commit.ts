@@ -1,6 +1,7 @@
 import $ from "jsr:@david/dax@0.40.1";
 import OpenAI from 'npm:openai@4.38.3';
 import { parseArgs } from "jsr:@std/cli@0.223.0"
+import { gpt } from "./gpt.ts";
 
 
 async function dax(strings: TemplateStringsArray, ...values: any[]) {
@@ -68,10 +69,6 @@ export async function commit(): Promise<void> {
         return Deno.exit(1);
     }
 
-    const openai = new OpenAI({
-        apiKey,
-        baseURL,
-    });
 
 
 
@@ -82,23 +79,33 @@ export async function commit(): Promise<void> {
         Deno.exit(1);
     }
 
+    // const openai = new OpenAI({
+    //     apiKey,
+    //     baseURL,
+    // });
 
-    const chatCompletion = await openai.chat.completions.create({
+    // const chatCompletion = await openai.chat.completions.create({
+    //     model,
+    //     messages: [
+    //         {
+    //             role: "system",
+    //             content: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
+    //         },
+    //         {
+    //             role: "user",
+    //             content: diff
+    //         }
+    //     ],
+    //     temperature: 0,
+    //     stream: false,
+    // });
+    let commitMessage: string = await gpt({
         model,
-        messages: [
-            {
-                role: "system",
-                content: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
-            },
-            {
-                role: "user",
-                content: diff
-            }
-        ],
-        temperature: 0,
-        stream: false,
-    });
-    let commitMessage: string = chatCompletion.choices[0].message.content || "";
+        apiKey,
+        baseURL,
+        content: diff,
+        systemContent: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
+    })
     commitMessage = commitMessage?.trim().replace(/(^['"`]|$['"`])/, "").replace(/`/g, "'");
     debug && console.debug({ commitMessage });
     if (!commitMessage) {
