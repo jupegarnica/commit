@@ -17,7 +17,7 @@ async function dax(strings: TemplateStringsArray, ...values: any[]) {
 
 export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
-        boolean: ['add', 'push', 'ollama', 'debug', 'config', 'skipEdit', 'noCommit'],
+        boolean: ['add', 'push', 'ollama', 'debug', 'config', 'skipEdit', 'noCommit', 'help'],
         string: ['apiKey', 'model', 'baseURL', 'maxWords'],
     });
     const MAX_TOKENS = Number(args.maxWords) || 6_000;
@@ -25,6 +25,25 @@ export async function commit(): Promise<void> {
     let model = args.model || 'gpt-4o';
     let baseURL: string | undefined = undefined;
     let apiKey = args.apiKey || Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
+
+    if (args.help) {
+        console.log(`Usage: commit [options]
+        Options:
+        --apiKey: OpenAI API Key
+        --add: Add all changes to commit
+        --push: Push changes to remote
+        --ollama: Use local model
+        --model: OpenAI model
+        --baseURL: base URL for ollama server
+        --debug: Debug mode
+        --config: Set OpenAI API Key
+        --skipEdit: Skip commit message edit
+        --noCommit: Print commit message
+        --maxWords: Maximum words for commit message
+        --help: Show help
+        `);
+        return;
+    }
 
     if (!apiKey || args.config) {
         apiKey = await $.prompt('Enter OpenAI API Key or set OPENAI_API_KEY env variable');
