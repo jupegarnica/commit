@@ -68,7 +68,7 @@ if (import.meta.main) {
         Deno.exit(1);
     }
     const response = await gpt({
-        model: "gpt-4o",
+        model: "gpt-4o-mini",
         apiKey: Deno.env.get('OCO_OPENAI_API_KEY')!,
         baseURL: undefined,
         content: content,
