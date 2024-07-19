@@ -23,7 +23,7 @@ export async function commit(): Promise<void> {
     });
     const MAX_TOKENS = Number(args.maxWords) || 6_000;
     let debug = args.debug || false;
-    let model = args.model || 'gpt-4o';
+    let model = args.model || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
     let apiKey = args.apiKey || Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
 
