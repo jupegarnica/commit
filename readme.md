@@ -9,7 +9,7 @@ You will also need an OpenAI API key to use this script. You can sign up for an 
 # Install
 
 ```sh
-deno install -A -fn commit  jsr:@garn/commit
+deno install --global -A -fn commit  jsr:@garn/commit
 ```
 
 ## Usage
