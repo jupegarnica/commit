@@ -12,5 +12,6 @@
     "name": "@garn/commit",
     "version": "0.0.10",
     "description": "conventional commit generator cli by AI",
-    "exports": "./commit.ts"
+    "exports": "./commit.ts",
+    "license": "MIT",
 }
