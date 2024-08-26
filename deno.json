@@ -13,5 +13,5 @@
     "version": "0.0.10",
     "description": "conventional commit generator cli by AI",
     "exports": "./commit.ts",
-    "license": "MIT",
+    "license": "MIT"
 }
