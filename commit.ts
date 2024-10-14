@@ -60,7 +60,14 @@ export async function commit(): Promise<void> {
     }
 
     if (args.version) {
-        const { version } = JSON.parse(await Deno.readTextFile(new URL('./deno.json', import.meta.url)));
+        let version: string | undefined;
+        if (import.meta.url.startsWith('http')) {
+            const response = await fetch(new URL('./deno.json', import.meta.url));
+            const json = await response.json();
+            version = json.version;
+        } else {
+            version = JSON.parse(await Deno.readTextFile(new URL('./deno.json', import.meta.url))).version;
+        }
         console.info(version);
         return;
     }
