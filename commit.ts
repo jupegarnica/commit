@@ -37,7 +37,7 @@ export async function commit(): Promise<void> {
     let debug = args.debug || false;
     let model = args.model || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
-    let apiKey = args.apiKey || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
+    let apiKey = args.apiKey ||  localStorage.getItem('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY');
 
     if (args.help) {
         console.info(`Usage: commit [options]
