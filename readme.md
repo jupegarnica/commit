@@ -20,6 +20,7 @@ commit [OPTIONS]
 
 - `--add`: Runs `git add .` before creating the commit message.
 - `--push`: Runs `git push` after creating the commit.
+- `--commits-to-learn <number>`: Specifies the number of commits to learn from. The default is 10.
 - `--skipEdit`: Skips the editing of the commit message before creating the commit.
 - `--noCommit`: Skips the creation of the commit. Just prints the commit message.
 - `--model <model>`: Specifies the model to use for generating the commit message. The default is `gpt-4o`.
