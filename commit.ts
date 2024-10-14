@@ -29,15 +29,13 @@ async function daxSilent(strings: TemplateStringsArray, ...values: any[]) {
 export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
         boolean: ['add', 'push', 'ollama', 'debug', 'config', 'skip-edit', 'no-commit', 'help'],
-        string: ['apiKey', 'model', 'base-URL', 'max-words', 'commits-to-learn'],
-
-
+        string: ['api-key', 'model', 'base-URL', 'max-words', 'commits-to-learn'],
     });
-    const MAX_TOKENS = Number(args.maxWords) || 6_000;
+    const MAX_TOKENS = Number(args['max-words']) || 6_000;
     let debug = args.debug || false;
-    let model = args.model || 'gpt-4o-mini';
+    let model = args.model || 'gpt-4o'; // || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
-    let apiKey = args.apiKey ||  localStorage.getItem('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY');
+    let apiKey = args['api-key'] ||  localStorage.getItem('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY');
 
     if (args.help) {
         console.info(`Usage: commit [options]
@@ -82,7 +80,7 @@ export async function commit(): Promise<void> {
 
     if (args.ollama) {
         model = args.model || 'llama3';
-        baseURL = args.baseURL || 'http://localhost:11434/v1';
+        baseURL = args['base-URL'] || 'http://localhost:11434/v1';
 
     }
     debug && console.debug({ args,  model, baseURL });
@@ -103,7 +101,7 @@ export async function commit(): Promise<void> {
         console.error(`Input is too long: ${words} words`);
         Deno.exit(1);
     }
-    const commitsToLearn = Number(args.commitsToLearn) || 10;
+    const commitsToLearn = Number(args['commits-to-learn']) || 10;
     if (isNaN(commitsToLearn)) {
         console.error(`Invalid commitsToLearn: ${commitsToLearn}`);
         Deno.exit(1);
@@ -133,12 +131,12 @@ export async function commit(): Promise<void> {
         Deno.exit(1);
     }
 
-    if (args.noCommit) {
+    if (args['no-commit']) {
         console.info(commitMessage);
         return;
 
     }
-    const edit = args.skipEdit ? '' : ' --edit';
+    const edit = args['skip-edit'] ? '' : ' --edit';
     await dax`git commit ${edit} -m "${commitMessage}"`;
 
     if (args.push) {
