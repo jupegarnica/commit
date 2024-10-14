@@ -15,6 +15,17 @@ async function dax(strings: TemplateStringsArray, ...values: any[]) {
     }
 }
 
+async function daxSilent(strings: TemplateStringsArray, ...values: any[]) {
+
+    try {
+        return await $.raw(strings, ...values).text();
+    } catch (error) {
+        console.error(error);
+        Deno.exit(1);
+    }
+}
+
+
 
 export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
@@ -62,7 +73,7 @@ export async function commit(): Promise<void> {
 
     }
     debug && console.debug({ args,  model, baseURL });
-    const diff = await $.raw`git diff --unified=5 --staged -- . ':(exclude)*.lock'`.text();
+    const diff = await daxSilent`git diff --unified=5 --staged -- . ':(exclude)*.lock'`
     debug && console.debug({ diff });
 
     if (!diff) {
@@ -79,33 +90,28 @@ export async function commit(): Promise<void> {
         console.error(`Input is too long: ${words} words`);
         Deno.exit(1);
     }
+    const commitsToLearn = Number(args.commitsToLearn) || 10;
+    if (isNaN(commitsToLearn)) {
+        console.error(`Invalid commitsToLearn: ${commitsToLearn}`);
+        Deno.exit(1);
+    }
+    let commits = '';
+    if (commitsToLearn > 0) {
+        commits = await daxSilent`git log --oneline -n ${commitsToLearn}`;
+        debug && console.debug({commits});
+    }
 
-    // const openai = new OpenAI({
-    //     apiKey,
-    //     baseURL,
-    // });
 
-    // const chatCompletion = await openai.chat.completions.create({
-    //     model,
-    //     messages: [
-    //         {
-    //             role: "system",
-    //             content: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
-    //         },
-    //         {
-    //             role: "user",
-    //             content: diff
-    //         }
-    //     ],
-    //     temperature: 0,
-    //     stream: false,
-    // });
+    let systemContent = "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. Do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything else, just the commit message without any quotes or backticks."
+    if (commits) {
+        systemContent += `\nYou should follow the commit style of this commits:\n${commits}`;
+    }
     let commitMessage: string = await gpt({
         model,
         apiKey,
         baseURL,
         content: diff,
-        systemContent: "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything els, just the commit message without any quotes or backticks."
+        systemContent,
     })
     commitMessage = commitMessage?.trim().replace(/(^['"`]|$['"`])/, "").replace(/`/g, "'");
     debug && console.debug({ commitMessage });
