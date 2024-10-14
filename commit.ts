@@ -1,5 +1,4 @@
 import $ from "jsr:@david/dax@0.40.1";
-import OpenAI from 'npm:openai@4.38.3';
 import { parseArgs } from "jsr:@std/cli@0.223.0"
 import { gpt } from "./gpt.ts";
 
@@ -30,24 +29,26 @@ async function daxSilent(strings: TemplateStringsArray, ...values: any[]) {
 export async function commit(): Promise<void> {
     const args = parseArgs(Deno.args, {
         boolean: ['add', 'push', 'ollama', 'debug', 'config', 'skipEdit', 'noCommit', 'help'],
-        string: ['apiKey', 'model', 'baseURL', 'maxWords'],
+        string: ['apiKey', 'model', 'baseURL', 'maxWords', 'commitsToLearn'],
+
     });
     const MAX_TOKENS = Number(args.maxWords) || 6_000;
     let debug = args.debug || false;
     let model = args.model || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
-    let apiKey = args.apiKey || Deno.env.get('OCO_OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
+    let apiKey = args.apiKey || Deno.env.get('OPENAI_API_KEY') || localStorage.getItem('OPENAI_API_KEY');
 
     if (args.help) {
-        console.log(`Usage: commit [options]
+        console.info(`Usage: commit [options]
 
---add: Runsgit add . before creating the commit message.
---push: Runsgit push after creating the commit.
+--add: Runs git add . before creating the commit message.
+--push: Runs git push after the commit creation.
+--commitsToLearn: default is 10. Number of commits to learn from.
 --skipEdit: Skips the editing of the commit message before creating the commit.
 --noCommit: Skips the creation of the commit.Just prints the commit message.
 --model<model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
 --config: Ask for the OpenAI API key and save it.
---apiKey<apiKey>: Specifies the OpenAI API key to use.This will override the value set in theOPENAI_API_KEY environment variable.
+--apiKey<apiKey>: Specifies the OpenAI API key to use.This will override the value set in the OPENAI_API_KEY environment variable.
 --baseURL<baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
 --debug: Enables debug mode, which will print additional information to the console.
 --maxWords<maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
@@ -59,8 +60,12 @@ export async function commit(): Promise<void> {
     }
 
     if (!apiKey || args.config) {
-        apiKey = await $.prompt('Enter OpenAI API Key or set OPENAI_API_KEY env variable');
+        apiKey = await $.prompt('Enter OpenAI API Key');
         localStorage.setItem('OPENAI_API_KEY', apiKey);
+        if (args.config) {
+            console.info('API Key saved');
+            return;
+        }
     }
 
     if (args.add) {
@@ -121,7 +126,7 @@ export async function commit(): Promise<void> {
     }
 
     if (args.noCommit) {
-        console.log(commitMessage);
+        console.info(commitMessage);
         return;
 
     }
