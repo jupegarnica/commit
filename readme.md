@@ -31,6 +31,7 @@ commit [OPTIONS]
 - `--maxWords <maxWords>`: Specifies the maximum number of words to call the api. The default is 6000. Is useful to no incur in extra charges.
 - `--ollama`: Uses the `llama3` model and sets the base URL to 'http://localhost:11434/v1'.
 - `--help`: Prints the help message.
+- `--version`: Prints the version number.
 
 ### Environment Variables
 
