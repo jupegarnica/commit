@@ -48,10 +48,10 @@ export async function commit(): Promise<void> {
 --model <model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
 --config: Ask for the OpenAI API key and save it.
 --api-key <apiKey>: Specifies the OpenAI API key to use. This will override the value set in the OPENAI_API_KEY environment variable.
---base-URL <baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
---debug: Enables debug mode, which will print additional information to the console.
 --max-words <maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
+--base-URL <baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
 --ollama: Uses the llama3 model and sets the base URL to 'http://localhost:11434/v1'.
+--debug: Enables debug mode, which will print additional information to the console.
 --help: Prints the help message.
 --version: Prints the version number.
 
