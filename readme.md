@@ -4,6 +4,8 @@
 
 This script requires Deno to run. If you don't have Deno installed, you can install it by following the instructions on the [official Deno website](https://deno.land/).
 
+It needs git to be installed and configured in your system. You can install git by following the instructions on the [official git website](https://git-scm.com/).
+
 You will also need an OpenAI API key to use this script. You can sign up for an account and get an API key on the [OpenAI website](https://platform.openai.com/).
 
 # Install
