@@ -3,21 +3,21 @@ import { parseArgs } from "jsr:@std/cli@0.223.0"
 import { gpt } from "./gpt.ts";
 
 
-async function dax(strings: TemplateStringsArray, ...values: any[]) {
+async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
 
     try {
-        return await $.raw(strings, ...values);
-    } catch (error) {
+        return await $.raw(strings, ...values.map(String))
+    } catch (_error) {
         // console.error(error.message);
         Deno.exit(1);
 
     }
 }
 
-async function daxSilent(strings: TemplateStringsArray, ...values: any[]) {
+async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
 
     try {
-        return await $.raw(strings, ...values).text();
+        return await $.raw(strings, ...values.map(String)).text();
     } catch (error) {
         console.error(error);
         Deno.exit(1);
@@ -32,7 +32,7 @@ export async function commit(): Promise<void> {
         string: ['api-key', 'model', 'base-URL', 'max-words', 'commits-to-learn'],
     });
     const MAX_TOKENS = Number(args['max-words']) || 6_000;
-    let debug = args.debug || false;
+    const debug = args.debug || false;
     let model = args.model || 'gpt-4o'; // || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
     let apiKey = args['api-key'] ||  localStorage.getItem('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY');
