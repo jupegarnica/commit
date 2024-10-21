@@ -33,7 +33,7 @@ export async function commit(): Promise<void> {
     });
     const MAX_TOKENS = Number(args['max-words']) || 6_000;
     const debug = args.debug || false;
-    let model = args.model || 'gpt-4o'; // || 'gpt-4o-mini';
+    let model = args.model || 'gpt-4o';  // || 'gpt-4o-mini';
     let baseURL: string | undefined = undefined;
     let apiKey = args['api-key'] ||  localStorage.getItem('OPENAI_API_KEY') || Deno.env.get('OPENAI_API_KEY');
 
