@@ -37,7 +37,7 @@ commit [OPTIONS]
   message.
 - `--model <model>`: Specifies the model to use for generating the commit
   message. The default is `gpt-4o`.
-- `--config`: Ask for the OpenAI API key and save it.
+- `--config`: Prompts for the default options and saves them.
 - `--api-key <apiKey>`: Specifies the OpenAI API key to use. This will override
   the value set in the `OPENAI_API_KEY` environment variable.
 - `--max-words <maxWords>`: Specifies the maximum number of words to call the
