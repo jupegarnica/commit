@@ -42,6 +42,7 @@ export async function commit(): Promise<void> {
 
 --add: Runs git add . before creating the commit message.
 --push: Runs git push after the commit creation.
+--amend: Runs git commit --amend instead of git commit.
 --commits-to-learn: default is 10. Number of commits to learn from.
 --skip-edit: Skips the editing of the commit message before creating the commit.
 --no-commit: Skips the creation of the commit.Just prints the commit message.
@@ -145,7 +146,8 @@ export async function commit(): Promise<void> {
 
     }
     const edit = args['skip-edit'] ? '' : ' --edit';
-    await dax`git commit ${edit} -m "${commitMessage}"`;
+    const amend = args.amend ? ' --amend' : '';
+    await dax`git commit ${amend} ${edit} -m "${commitMessage}"`;
 
     if (args.push) {
         await $`git push`;

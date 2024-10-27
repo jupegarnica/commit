@@ -22,6 +22,7 @@ commit [OPTIONS]
 
 - `--add`: Runs `git add .` before creating the commit message.
 - `--push`: Runs `git push` after creating the commit.
+- `--amend`: Runs `git commit --amend` instead of `git commit`.
 - `--commits-to-learn <number>`: Specifies the number of commits to learn from. The default is 10.
 - `--skip-edit`: Skips the editing of the commit message before creating the commit.
 - `--no-commit`: Skips the creation of the commit. Just prints the commit message.
