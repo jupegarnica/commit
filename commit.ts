@@ -1,5 +1,5 @@
 import $ from "jsr:@david/dax@0.40.1";
-import { parseArgs } from "jsr:@std/cli@0.223.0";
+import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { gpt } from "./gpt.ts";
 
 async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
