@@ -1,17 +1,17 @@
 {
-    "lock": false,
-    "tasks": {
-        "i:jsr": "deno install -A -fn commit  jsr:@garn/commit",
-        "i": "deno install -gA -fn commit  commit.ts",
-        "i:gpt": "deno install -gA -fn gpt  gpt.ts",
-        "dev": "deno run -A commit.ts",
-        "gpt": "deno run -A gpt.ts",
-        "run": "deno run -A jsr:@garn/commit",
-        "publish": "deno publish"
-    },
-    "name": "@garn/commit",
-    "version": "0.0.16",
-    "description": "conventional commit generator cli by AI",
-    "exports": "./commit.ts",
-    "license": "MIT"
+  "lock": false,
+  "tasks": {
+    "i:jsr": "deno install -A -fn commit  jsr:@garn/commit",
+    "i": "deno install -gA -fn commit  commit.ts",
+    "i:gpt": "deno install -gA -fn gpt  gpt.ts",
+    "dev": "deno run -A commit.ts",
+    "gpt": "deno run -A gpt.ts",
+    "run": "deno run -A jsr:@garn/commit",
+    "publish": "deno publish"
+  },
+  "name": "@garn/commit",
+  "version": "0.0.16",
+  "description": "conventional commit generator cli by AI",
+  "exports": "./commit.ts",
+  "license": "MIT"
 }
