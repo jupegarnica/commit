@@ -34,12 +34,19 @@ export async function commit(): Promise<void> {
     ],
     string: ["api-key", "model", "base-URL", "max-words", "commits-to-learn"],
   });
-  const MAX_TOKENS = Number(args["max-words"]) || 6_000;
-  const debug = args.debug || false;
-  let model = args.model || "gpt-4o"; // || 'gpt-4o-mini';
-  let baseURL: string | undefined = undefined;
-  let apiKey = args["api-key"] || localStorage.getItem("OPENAI_API_KEY") ||
-    Deno.env.get("OPENAI_API_KEY");
+  const DEFAULTS = `{
+  "api-key": "",
+  "model": "gpt-4o",
+  "max-words": 6000,
+  "base-URL": "",
+  "commits-to-learn": 10,
+  "debug": false
+  }`;
+  const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
+  const configSaved = JSON.parse(
+    localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS
+  );
+
 
   if (args.help) {
     console.info(`Usage: commit [options]
@@ -72,21 +79,55 @@ export async function commit(): Promise<void> {
       version = json.version;
     } else {
       version = JSON.parse(
-        await Deno.readTextFile(new URL("./deno.json", import.meta.url)),
+        await Deno.readTextFile(new URL("./deno.json", import.meta.url))
       ).version;
     }
     debug && console.debug("import.meta.url", import.meta.url);
     console.info(version);
     return;
   }
+  const apiKey =
+  args["api-key"] || configSaved["api-key"] || Deno.env.get("OPENAI_API_KEY");
+  configSaved["api-key"] = apiKey;
+  if (args.config) {
 
-  if (!apiKey || args.config) {
-    apiKey = await $.prompt("Enter OpenAI API Key");
-    localStorage.setItem("OPENAI_API_KEY", apiKey);
-    if (args.config) {
-      console.info("API Key saved");
-      return;
+    for (const key in configSaved) {
+      const defaultValue = configSaved[key];
+      const defaultType = typeof configSaved[key];
+      const mask = key === "api-key";
+      const value = await $.prompt(`Enter ${key}`, {
+        default: defaultValue,
+        mask,
+      });
+      let valueParsed;
+      switch (defaultType) {
+        case "number":
+          valueParsed = Number(value);
+          break;
+        case "boolean":
+          valueParsed = value === "true";
+          break;
+        default:
+          valueParsed = value;
+      }
+      configSaved[key] = valueParsed;
     }
+    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+    console.info("Config saved.");
+    args.debug && console.debug({ configSaved });
+    return;
+  }
+  const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
+  const debug = args.debug || configSaved.debug;
+  let model = args.model || configSaved.model; // || 'gpt-4o-mini';
+  let baseURL: string | undefined = args["base-URL"] || configSaved.baseURL;
+
+  if (!configSaved["api-key"]) {
+    configSaved["api-key"] = await $.prompt("Not api-key found. Enter OpenAI API Key", {
+      mask: true,
+    });
+    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+    console.info("API Key saved, use --config to change it.");
   }
 
   if (args.add) {
@@ -104,14 +145,14 @@ export async function commit(): Promise<void> {
 
   if (!diff) {
     console.error(
-      "No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files.",
+      "No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files."
     );
     return Deno.exit(1);
   }
 
   const words = diff.split(" ").length;
   debug && console.debug({ words });
-  if (words > MAX_TOKENS) {
+  if (words > MAX_WORD) {
     console.error(`Input is too long: ${words} words`);
     Deno.exit(1);
   }
@@ -129,8 +170,7 @@ export async function commit(): Promise<void> {
   let systemContent =
     "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. Do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.";
   if (commits) {
-    systemContent +=
-      `\nYou should follow the commit style of this commits:\n${commits}`;
+    systemContent += `\nYou should follow the commit style of this commits:\n${commits}`;
   }
 
   let commitMessage: string = await gpt({
@@ -140,10 +180,10 @@ export async function commit(): Promise<void> {
     content: diff,
     systemContent,
   });
-  commitMessage = commitMessage?.trim().replace(/(^['"`]|$['"`])/, "").replace(
-    /`/g,
-    "'",
-  );
+  commitMessage = commitMessage
+    ?.trim()
+    .replace(/(^['"`]|$['"`])/, "")
+    .replace(/`/g, "'");
   debug && console.debug({ commitMessage });
   if (!commitMessage) {
     console.error("No commitMessage");
