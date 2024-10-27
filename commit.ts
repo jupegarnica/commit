@@ -46,7 +46,10 @@ export async function commit(): Promise<void> {
   const configSaved = JSON.parse(
     localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS
   );
-
+const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
+  const debug = args.debug || configSaved.debug;
+  let model = args.model || configSaved.model; // || 'gpt-4o-mini';
+  let baseURL: string | undefined = args["base-URL"] || configSaved.baseURL;
 
   if (args.help) {
     console.info(`Usage: commit [options]
@@ -117,12 +120,9 @@ export async function commit(): Promise<void> {
     args.debug && console.debug({ configSaved });
     return;
   }
-  const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
-  const debug = args.debug || configSaved.debug;
-  let model = args.model || configSaved.model; // || 'gpt-4o-mini';
-  let baseURL: string | undefined = args["base-URL"] || configSaved.baseURL;
 
-  if (!configSaved["api-key"]) {
+
+  if (!apiKey) {
     configSaved["api-key"] = await $.prompt("Not api-key found. Enter OpenAI API Key", {
       mask: true,
     });
