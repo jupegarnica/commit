@@ -93,6 +93,23 @@ const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
   args["api-key"] || configSaved["api-key"] || Deno.env.get("OPENAI_API_KEY");
   configSaved["api-key"] = apiKey;
   if (args.config) {
+    const defaultConfig = JSON.parse(DEFAULTS);
+    const configChanged = Object.keys(configSaved).some(
+      key => configSaved[key] !== defaultConfig[key]
+    );
+
+    if (configChanged) {
+      const reset = await $.select({
+        message: "Would you like to change config or reset to default?",
+        options: ["change", "default"],
+      });
+
+      if (reset === 1) {
+        localStorage.setItem(DEFAULT_CONFIG_KEY, DEFAULTS);
+        console.info("All settings have been reset to default.");
+        return;
+      }
+    }
 
     for (const key in configSaved) {
       const defaultValue = configSaved[key];
@@ -120,7 +137,6 @@ const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
     args.debug && console.debug({ configSaved });
     return;
   }
-
 
   if (!apiKey) {
     configSaved["api-key"] = await $.prompt("Not api-key found. Enter OpenAI API Key", {
