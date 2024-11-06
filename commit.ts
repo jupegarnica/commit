@@ -1,7 +1,6 @@
 import $ from "jsr:@david/dax@0.42.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { gpt } from "./gpt.ts";
-import { promptSecret } from "jsr:@std/cli/prompt-secret";
 
 async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
