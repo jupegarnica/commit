@@ -230,8 +230,11 @@ if (import.meta.main) {
 
 async function prompt(
   message: string,
-  options: { default?: string; mask?: boolean, noClear?: boolean } = {  }
+  options: { default?: string; mask?: boolean; noClear?: boolean } = {}
 ): Promise<string> {
+
   options.noClear = true;
-  return (await $.prompt(message, options) || '').trim();
+  options.default = String(options.default);
+  const result = (await $.prompt(`${message}`, options));
+  return String(result).trim();
 }
