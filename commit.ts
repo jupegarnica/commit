@@ -1,6 +1,7 @@
 import $ from "jsr:@david/dax@0.42.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { gpt } from "./gpt.ts";
+import { promptSecret } from "jsr:@std/cli/prompt-secret";
 
 async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -46,7 +47,7 @@ export async function commit(): Promise<void> {
   const configSaved = JSON.parse(
     localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS
   );
-const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
+  const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
   const debug = args.debug || configSaved.debug;
   let model = args.model || configSaved.model; // || 'gpt-4o-mini';
   let baseURL: string | undefined = args["base-URL"] || configSaved.baseURL;
@@ -90,12 +91,13 @@ const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
     return;
   }
   const apiKey =
-  args["api-key"] || configSaved["api-key"] || Deno.env.get("OPENAI_API_KEY");
+    args["api-key"] || configSaved["api-key"] || Deno.env.get("OPENAI_API_KEY");
   configSaved["api-key"] = apiKey;
+
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
     const configChanged = Object.keys(configSaved).some(
-      key => configSaved[key] !== defaultConfig[key]
+      (key) => configSaved[key] !== defaultConfig[key]
     );
 
     if (configChanged) {
@@ -111,37 +113,41 @@ const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
       }
     }
 
-    for (const key in configSaved) {
-      const defaultValue = configSaved[key];
-      const defaultType = typeof configSaved[key];
-      const mask = key === "api-key";
-      const value = await $.prompt(`Enter ${key}`, {
-        default: defaultValue,
-        mask,
-      });
-      let valueParsed;
-      switch (defaultType) {
-        case "number":
-          valueParsed = Number(value);
-          break;
-        case "boolean":
-          valueParsed = value === "true";
-          break;
-        default:
-          valueParsed = value;
-      }
-      configSaved[key] = valueParsed;
-    }
-    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+    const newConfig = {
+      "api-key": await prompt(
+        "Enter openai api key\nhttps://platform.openai.com/api-keys\n",
+        { default: configSaved["api-key"], mask: true }
+      ),
+      model: await prompt("Enter model", { default: configSaved["model"] }),
+      "max-words": Number(
+        await prompt("Enter max-words", { default: configSaved["max-words"] })
+      ),
+      "base-URL": await prompt("Enter base-URL", {
+        default: configSaved["base-URL"],
+      }),
+      "commits-to-learn": Number(
+        await prompt("Enter commits-to-learn", {
+          default: configSaved["commits-to-learn"],
+        })
+      ),
+      debug:
+        (await prompt("Enter debug", { default: configSaved["debug"] })) ===
+        "true",
+    };
+
+    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(newConfig));
     console.info("Config saved.");
-    args.debug && console.debug({ configSaved });
+    args.debug && console.debug({ newConfig });
     return;
   }
 
   if (!apiKey) {
-    configSaved["api-key"] = await $.prompt("Not api-key found. Enter OpenAI API Key", {
-      mask: true,
-    });
+    configSaved["api-key"] = await $.prompt(
+      "Not api-key found. Enter OpenAI API Key",
+      {
+        mask: true,
+      }
+    );
     localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
     console.info("API Key saved, use --config to change it.");
   }
@@ -221,4 +227,12 @@ const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
 
 if (import.meta.main) {
   await commit();
+}
+
+async function prompt(
+  message: string,
+  options: { default?: string; mask?: boolean, noClear?: boolean } = {  }
+): Promise<string> {
+  options.noClear = true;
+  return (await $.prompt(message, options)).trim();
 }
