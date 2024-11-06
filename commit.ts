@@ -233,5 +233,5 @@ async function prompt(
   options: { default?: string; mask?: boolean, noClear?: boolean } = {  }
 ): Promise<string> {
   options.noClear = true;
-  return (await $.prompt(message, options)).trim();
+  return (await $.prompt(message, options) || '').trim();
 }
