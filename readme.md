@@ -1,5 +1,7 @@
 # Commit
 
+Write commit messages powered by IA
+
 ## Requirements
 
 This script requires Deno to run. If you don't have Deno installed, you can
