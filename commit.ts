@@ -171,6 +171,19 @@ export async function commit(): Promise<void> {
     return Deno.exit(1);
   }
 
+  // Run pre-commit hooks if they exist
+  try {
+    debug && console.debug('Running pre-commit hooks...');
+    const hasPreCommit = await daxSilent`test -x .git/hooks/pre-commit && echo "true" || echo "false"`;
+    if (hasPreCommit.trim() === "true") {
+      await dax`.git/hooks/pre-commit`;
+    }
+  } catch (error) {
+    console.error('Pre-commit hooks failed:');
+    console.error(error);
+    return Deno.exit(1);
+  }
+
   const words = diff.split(" ").length;
   debug && console.debug({ words });
   if (words > MAX_WORD) {
