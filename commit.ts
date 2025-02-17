@@ -179,29 +179,6 @@ export async function commit(): Promise<void> {
     Deno.exit(1);
   }
 
-  // Run pre-commit hooks if they exist
-  try {
-    debug && console.debug("Running pre-commit hooks...");
-    const gitDir = (await daxSilent`git rev-parse --git-dir`).trim();
-    const preCommitPath = join(gitDir, "hooks", "pre-commit");
-
-    let hasPreCommit = false;
-    try {
-      const stat = await Deno.stat(preCommitPath);
-      hasPreCommit = stat.isFile;
-    } catch (_error) {
-      // File doesn't exist or isn't accessible
-      hasPreCommit = false;
-    }
-
-    if (hasPreCommit) {
-      await dax`"${preCommitPath}"`;
-    }
-  } catch (error) {
-    console.error("Pre-commit hooks failed:", error);
-    return Deno.exit(1);
-  }
-
   const commitsToLearn = Number(args["commits-to-learn"]) || 10;
   if (isNaN(commitsToLearn)) {
     console.error(`Invalid commitsToLearn: ${commitsToLearn}`);
@@ -257,8 +234,7 @@ export async function commit(): Promise<void> {
   }
   const edit = args["skip-edit"] ? "" : " --edit";
   const amend = args.amend ? " --amend" : "";
-  // Use --no-verify to skip running the hook again
-  await dax`git commit --no-verify ${amend} ${edit} -m "${commitMessage}"`;
+  await dax`git commit ${amend} ${edit} -m "${commitMessage}"`;
 
   if (args.push) {
     await $`git push`;
