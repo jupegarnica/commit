@@ -189,9 +189,24 @@ export async function commit(): Promise<void> {
   }
 
   let systemContent =
-    "You are a expert in git diffs. You are helping a user to create a commit message for a git diff. You should use conventional commit notation to create a commit message for this git diff. Do not use any markdown markup, only text. If the git diff is empty return only zero characters. Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.";
+    `You are an expert in git diffs.
+    You are helping a user to create a commit message for a git diff.
+    You should use conventional commit notation to create a commit message for this git diff.
+    And follow this conventional commits rules:
+    - 'feat:' for new features where the code behavior changes
+    - 'fix:' for bug fixes where the code behavior changes
+    - 'refactor:' for code refactoring where the code behavior does not change,
+    - 'docs:' for documentation changes,
+    - 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc),
+    - 'test:' for adding tests,
+    - 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.
+    Do not use any markdown markup, only text.
+    Only describe the changes in the code, do not include any other information like purpose of the changes or which file has been modified.
+    If the git diff is empty return an empty string with zero characters.
+    Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
+    `;
   if (commits) {
-    systemContent += `\nYou should follow the commit style of this commits:\n${commits}`;
+    systemContent += `\nYou should follow the commit style of these commits:\n${commits}`;
   }
 
   let commitMessage: string = await gpt({
