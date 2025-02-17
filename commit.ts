@@ -161,8 +161,13 @@ export async function commit(): Promise<void> {
     baseURL = args["base-URL"] || "http://localhost:11434/v1";
   }
   debug && console.debug({ args, model, baseURL });
-  const diff =
+  let diff =
     await daxSilent`git diff --unified=5 --staged -- . ':(exclude)*.lock'`;
+  // Added: append last commit diff if --amend flag is provided
+  if (args.amend) {
+    const lastCommitDiff = await daxSilent`git show --unified=5 --pretty=format: HEAD`;
+    diff += "\n" + lastCommitDiff;
+  }
   debug && console.debug({ diff });
 
   if (!diff) {
