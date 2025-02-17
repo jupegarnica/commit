@@ -172,11 +172,18 @@ export async function commit(): Promise<void> {
     return Deno.exit(1);
   }
 
+  const words = diff.split(" ").length;
+  debug && console.debug({ words });
+  if (words > MAX_WORD) {
+    console.error(`Input is too long: ${words} words`);
+    Deno.exit(1);
+  }
+
   // Run pre-commit hooks if they exist
   try {
-    debug && console.debug('Running pre-commit hooks...');
+    debug && console.debug("Running pre-commit hooks...");
     const gitDir = (await daxSilent`git rev-parse --git-dir`).trim();
-    const preCommitPath = join(gitDir, 'hooks', 'pre-commit');
+    const preCommitPath = join(gitDir, "hooks", "pre-commit");
 
     let hasPreCommit = false;
     try {
@@ -191,16 +198,10 @@ export async function commit(): Promise<void> {
       await dax`"${preCommitPath}"`;
     }
   } catch (error) {
-    console.error('Pre-commit hooks failed:', error);
+    console.error("Pre-commit hooks failed:", error);
     return Deno.exit(1);
   }
 
-  const words = diff.split(" ").length;
-  debug && console.debug({ words });
-  if (words > MAX_WORD) {
-    console.error(`Input is too long: ${words} words`);
-    Deno.exit(1);
-  }
   const commitsToLearn = Number(args["commits-to-learn"]) || 10;
   if (isNaN(commitsToLearn)) {
     console.error(`Invalid commitsToLearn: ${commitsToLearn}`);
@@ -212,8 +213,7 @@ export async function commit(): Promise<void> {
     debug && console.debug({ commits });
   }
 
-  let systemContent =
-    `You are an expert in git diffs.
+  let systemContent = `You are an expert in git diffs.
     You are helping a user to create a commit message for a git diff.
     You should use conventional commit notation to create a commit message for this git diff.
     And follow this conventional commits rules:
@@ -257,7 +257,8 @@ export async function commit(): Promise<void> {
   }
   const edit = args["skip-edit"] ? "" : " --edit";
   const amend = args.amend ? " --amend" : "";
-  await dax`git commit ${amend} ${edit} -m "${commitMessage}"`;
+  // Use --no-verify to skip running the hook again
+  await dax`git commit --no-verify ${amend} ${edit} -m "${commitMessage}"`;
 
   if (args.push) {
     await $`git push`;
@@ -272,9 +273,8 @@ async function prompt(
   message: string,
   options: { default?: string; mask?: boolean; noClear?: boolean } = {}
 ): Promise<string> {
-
   options.noClear = true;
   options.default = String(options.default);
-  const result = (await $.prompt(`${message}`, options));
+  const result = await $.prompt(`${message}`, options);
   return String(result).trim();
 }
