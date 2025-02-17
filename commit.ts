@@ -1,5 +1,6 @@
 import $ from "jsr:@david/dax@0.42.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
+import { join } from "jsr:@std/path@1.0.6";
 import { gpt } from "./gpt.ts";
 
 async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
@@ -174,13 +175,23 @@ export async function commit(): Promise<void> {
   // Run pre-commit hooks if they exist
   try {
     debug && console.debug('Running pre-commit hooks...');
-    const hasPreCommit = await daxSilent`test -x .git/hooks/pre-commit && echo "true" || echo "false"`;
-    if (hasPreCommit.trim() === "true") {
-      await dax`.git/hooks/pre-commit`;
+    const gitDir = (await daxSilent`git rev-parse --git-dir`).trim();
+    const preCommitPath = join(gitDir, 'hooks', 'pre-commit');
+
+    let hasPreCommit = false;
+    try {
+      const stat = await Deno.stat(preCommitPath);
+      hasPreCommit = stat.isFile;
+    } catch (_error) {
+      // File doesn't exist or isn't accessible
+      hasPreCommit = false;
+    }
+
+    if (hasPreCommit) {
+      await dax`"${preCommitPath}"`;
     }
   } catch (error) {
-    console.error('Pre-commit hooks failed:');
-    console.error(error);
+    console.error('Pre-commit hooks failed:', error);
     return Deno.exit(1);
   }
 
