@@ -202,6 +202,7 @@ export async function commit(): Promise<void> {
     - 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.
     Do not use any markdown markup, only text.
     Only describe the changes in the code, do not include any other information like purpose of the changes or which file has been modified.
+    Do not output any file names or line numbers.
     If the git diff is empty return an empty string with zero characters.
     Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
     `;
