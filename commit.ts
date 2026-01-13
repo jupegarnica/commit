@@ -33,7 +33,14 @@ export async function commit(): Promise<void> {
       "no-commit",
       "help",
     ],
-    string: ["api-key", "model", "base-URL", "max-words", "commits-to-learn"],
+    string: [
+      "api-key",
+      "model",
+      "base-URL",
+      "max-words",
+      "commits-to-learn",
+      "unified",
+    ],
   });
   const DEFAULTS = `{
   "api-key": "",
@@ -41,16 +48,18 @@ export async function commit(): Promise<void> {
   "max-words": 6000,
   "base-URL": "",
   "commits-to-learn": 10,
+  "unified": 5,
   "debug": false
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
   const configSaved = JSON.parse(
     localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS
   );
-  const MAX_WORD = Number(args["max-words"]) || configSaved.maxWords;
+  const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
+  const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
   let model = args.model || configSaved.model; // || 'gpt-4o-mini';
-  let baseURL: string | undefined = args["base-URL"] || configSaved.baseURL;
+  let baseURL: string | undefined = args["base-URL"] || configSaved["base-URL"];
 
   if (args.help) {
     console.info(`Usage: commit [options]
@@ -62,6 +71,7 @@ export async function commit(): Promise<void> {
 --skip-edit: Skips the editing of the commit message before creating the commit.
 --no-commit: Skips the creation of the commit.Just prints the commit message.
 --model <model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
+--unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
 --config: Prompts for the default options and saves them.
 --api-key <apiKey>: Specifies the OpenAI API key to use. This will override the value set in the OPENAI_API_KEY environment variable.
 --max-words <maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
@@ -130,6 +140,11 @@ export async function commit(): Promise<void> {
           default: configSaved["commits-to-learn"],
         })
       ),
+      unified: Number(
+        await prompt("Enter unified (lines of context in diff)", {
+          default: configSaved["unified"],
+        })
+      ),
       debug:
         (await prompt("Enter debug", { default: configSaved["debug"] })) ===
         "true",
@@ -162,10 +177,10 @@ export async function commit(): Promise<void> {
   }
   debug && console.debug({ args, model, baseURL });
   let diff =
-    await daxSilent`git diff --unified=5 --staged -- . ':(exclude)*.lock'`;
+    await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
   if (args.amend) {
-    const lastCommitDiff = await daxSilent`git show --unified=5 --pretty=format: HEAD`;
+    const lastCommitDiff = await daxSilent`git show --unified=${unified} --pretty=format: HEAD`;
     diff += "\n" + lastCommitDiff;
   }
   debug && console.debug({ diff });
