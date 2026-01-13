@@ -48,7 +48,7 @@ export async function commit(): Promise<void> {
   "max-words": 6000,
   "base-URL": "",
   "commits-to-learn": 10,
-  "unified": 5,
+  "unified": 10,
   "debug": false
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
