@@ -32,6 +32,8 @@ export async function commit(): Promise<void> {
       "skip-edit",
       "no-commit",
       "help",
+      "version",
+      "amend",
     ],
     string: [
       "api-key",
@@ -41,6 +43,24 @@ export async function commit(): Promise<void> {
       "commits-to-learn",
       "unified",
     ],
+    alias: {
+      "add": "A",
+      "push": "P",
+      "amend": "E",
+      "ollama": "O",
+      "debug": "D",
+      "config": "C",
+      "skip-edit": "S",
+      "no-commit": "N",
+      "help": "H",
+      "api-key": "K",
+      "model": "M",
+      "base-URL": "B",
+      "max-words": "W",
+      "commits-to-learn": "L",
+      "unified": "U",
+      "version": "V",
+    },
   });
   const DEFAULTS = `{
   "api-key": "",
@@ -64,22 +84,24 @@ export async function commit(): Promise<void> {
   if (args.help) {
     console.info(`Usage: commit [options]
 
---add: Runs git add . before creating the commit message.
---push: Runs git push after the commit creation.
---amend: Runs git commit --amend instead of git commit.
---commits-to-learn: default is 10. Number of commits to learn from.
---skip-edit: Skips the editing of the commit message before creating the commit.
---no-commit: Skips the creation of the commit.Just prints the commit message.
---model <model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
---unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
---config: Prompts for the default options and saves them.
---api-key <apiKey>: Specifies the OpenAI API key to use. This will override the value set in the OPENAI_API_KEY environment variable.
---max-words <maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
---base-URL <baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
---ollama: Uses the llama3 model and sets the base URL to 'http://localhost:11434/v1'.
---debug: Enables debug mode, which will print additional information to the console.
---help: Prints the help message.
---version: Prints the version number.
+Note: Options can be combined, e.g., -AP for add and push.
+
+-A, --add: Runs git add . before creating the commit message.
+-P, --push: Runs git push after the commit creation.
+-E, --amend: Runs git commit --amend instead of git commit.
+-L, --commits-to-learn: default is 10. Number of commits to learn from.
+-S, --skip-edit: Skips the editing of the commit message before creating the commit.
+-N, --no-commit: Skips the creation of the commit.Just prints the commit message.
+-M, --model <model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
+-U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
+-C, --config: Prompts for the default options and saves them.
+-K, --api-key <apiKey>: Specifies the OpenAI API key to use. This will override the value set in the OPENAI_API_KEY environment variable.
+-W, --max-words <maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
+-B, --base-URL <baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
+-O, --ollama: Uses the llama3 model and sets the base URL to 'http://localhost:11434/v1'.
+-D, --debug: Enables debug mode, which will print additional information to the console.
+-H, --help: Prints the help message.
+-V, --version: Prints the version number.
 
        `);
     return;
