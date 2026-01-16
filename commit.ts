@@ -21,8 +21,146 @@ async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   }
 }
 
+const KNOWN_BOOLEAN_LONG = new Set([
+  "add",
+  "push",
+  "ollama",
+  "debug",
+  "config",
+  "skip-edit",
+  "no-commit",
+  "help",
+  "version",
+  "amend",
+]);
+const KNOWN_STRING_LONG = new Set([
+  "api-key",
+  "model",
+  "base-URL",
+  "max-words",
+  "commits-to-learn",
+  "unified",
+]);
+const KNOWN_BOOLEAN_SHORT = new Set([
+  "A",
+  "P",
+  "O",
+  "D",
+  "C",
+  "S",
+  "N",
+  "H",
+  "V",
+  "E",
+]);
+const KNOWN_STRING_SHORT = new Set(["K", "M", "B", "W", "L", "U"]);
+
+export function collectExtraCommitArgs(argv: string[]): string[] {
+  const extras: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+
+    if (arg === "--") {
+      extras.push(...argv.slice(i + 1));
+      break;
+    }
+
+    if (arg.startsWith("--")) {
+      const [key, value] = arg.slice(2).split("=", 2);
+      if (KNOWN_BOOLEAN_LONG.has(key) || KNOWN_STRING_LONG.has(key)) {
+        if (!arg.includes("=") && KNOWN_STRING_LONG.has(key)) {
+          i++;
+        }
+        continue;
+      }
+
+      extras.push(arg);
+      if (!arg.includes("=") && value === undefined) {
+        const next = argv[i + 1];
+        if (next && !next.startsWith("-")) {
+          extras.push(next);
+          i++;
+        }
+      }
+      continue;
+    }
+
+    if (arg.startsWith("-") && arg !== "-") {
+      const short = arg.slice(1);
+
+      if (short.length === 1) {
+        const key = short;
+        if (KNOWN_BOOLEAN_SHORT.has(key) || KNOWN_STRING_SHORT.has(key)) {
+          if (KNOWN_STRING_SHORT.has(key)) {
+            i++;
+          }
+          continue;
+        }
+        extras.push(arg);
+        const next = argv[i + 1];
+        if (next && !next.startsWith("-")) {
+          extras.push(next);
+          i++;
+        }
+        continue;
+      }
+
+      if (short.includes("=")) {
+        const [key] = short.split("=", 2);
+        if (KNOWN_BOOLEAN_SHORT.has(key) || KNOWN_STRING_SHORT.has(key)) {
+          continue;
+        }
+        extras.push(arg);
+        continue;
+      }
+
+      const chars = short.split("");
+      const hasKnownString = chars.some((c) => KNOWN_STRING_SHORT.has(c));
+      const hasUnknown = chars.some((c) => !KNOWN_BOOLEAN_SHORT.has(c));
+
+      if (!hasUnknown) {
+        continue;
+      }
+
+      extras.push(arg);
+      if (hasKnownString) {
+        const next = argv[i + 1];
+        if (next && !next.startsWith("-")) {
+          extras.push(next);
+          i++;
+        }
+      }
+      continue;
+    }
+
+    extras.push(arg);
+  }
+
+  return extras;
+}
+
+async function runCommand(command: string, args: string[]) {
+  const cmd = new Deno.Command(command, {
+    args,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const { code } = await cmd.output();
+  if (code !== 0) {
+    Deno.exit(code);
+  }
+}
+
 export async function commit(): Promise<void> {
-  const args = parseArgs(Deno.args, {
+  const passthroughIndex = Deno.args.indexOf("--");
+  const argsToParse =
+    passthroughIndex === -1 ? Deno.args : Deno.args.slice(0, passthroughIndex);
+  const passthroughArgs =
+    passthroughIndex === -1 ? [] : Deno.args.slice(passthroughIndex + 1);
+
+  const args = parseArgs(argsToParse, {
     boolean: [
       "add",
       "push",
@@ -62,6 +200,10 @@ export async function commit(): Promise<void> {
       "version": "V",
     },
   });
+  const extraCommitArgs = [
+    ...collectExtraCommitArgs(argsToParse),
+    ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),
+  ];
   const DEFAULTS = `{
   "api-key": "",
   "model": "gpt-4o",
@@ -85,6 +227,8 @@ export async function commit(): Promise<void> {
     console.info(`Usage: commit [options]
 
 Note: Options can be combined, e.g., -AP for add and push.
+Extra options not recognized by this CLI are passed to git commit.
+Use -- to pass options that may conflict with this CLI.
 
 -A, --add: Runs git add . before creating the commit message.
 -P, --push: Runs git push after the commit creation.
@@ -197,7 +341,7 @@ Note: Options can be combined, e.g., -AP for add and push.
     model = args.model || "llama3";
     baseURL = args["base-URL"] || "http://localhost:11434/v1";
   }
-  debug && console.debug({ args, model, baseURL });
+  debug && console.debug({ args, model, baseURL, extraCommitArgs });
   let diff =
     await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
@@ -274,9 +418,15 @@ Note: Options can be combined, e.g., -AP for add and push.
     console.info(commitMessage);
     return;
   }
-  const edit = args["skip-edit"] ? "" : " --edit";
-  const amend = args.amend ? " --amend" : "";
-  await dax`git commit ${amend} ${edit} -m "${commitMessage}"`;
+  const commitArgs = ["commit", ...extraCommitArgs];
+  if (args.amend) {
+    commitArgs.push("--amend");
+  }
+  if (!args["skip-edit"]) {
+    commitArgs.push("--edit");
+  }
+  commitArgs.push("-m", commitMessage);
+  await runCommand("git", commitArgs);
 
   if (args.push) {
     await $`git push`;
