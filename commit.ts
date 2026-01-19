@@ -140,6 +140,34 @@ export function collectExtraCommitArgs(argv: string[]): string[] {
   return extras;
 }
 
+export function hasNoVerifyFlag(extraCommitArgs: string[]): boolean {
+  return extraCommitArgs.some((arg) => {
+    if (arg === "--no-verify" || arg === "-n") {
+      return true;
+    }
+    if (arg.startsWith("-") && !arg.startsWith("--")) {
+      return arg.slice(1).includes("n");
+    }
+    return false;
+  });
+}
+
+async function getPreCommitHookPath(): Promise<string | null> {
+  const hookPath = (await daxSilent`git rev-parse --git-path hooks/pre-commit`).trim();
+  if (!hookPath) {
+    return null;
+  }
+  try {
+    const stat = await Deno.stat(hookPath);
+    if (stat.isFile) {
+      return hookPath;
+    }
+  } catch (_error) {
+    return null;
+  }
+  return null;
+}
+
 async function runCommand(command: string, args: string[]) {
   const cmd = new Deno.Command(command, {
     args,
@@ -335,6 +363,14 @@ Use -- to pass options that may conflict with this CLI.
 
   if (args.add) {
     await $`git add .`;
+  }
+
+  const skipPreCommit = args["no-commit"] || hasNoVerifyFlag(extraCommitArgs);
+  if (!skipPreCommit) {
+    const hookPath = await getPreCommitHookPath();
+    if (hookPath) {
+      await runCommand("git", ["hook", "run", "pre-commit"]);
+    }
   }
 
   if (args.ollama) {
