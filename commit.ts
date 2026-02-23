@@ -234,8 +234,8 @@ export async function commit(): Promise<void> {
   ];
   const DEFAULTS = `{
   "api-key": "",
-  "model": "gpt-4o",
-  "max-words": 6000,
+  "model": "gpt-5-nano",
+  "max-words": 10000,
   "base-URL": "",
   "commits-to-learn": 10,
   "unified": 10,

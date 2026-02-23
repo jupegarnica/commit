@@ -30,7 +30,6 @@ export async function gpt({
         content: content,
       },
     ],
-    temperature: 0,
     stream: false,
   });
 
