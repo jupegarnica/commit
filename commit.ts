@@ -378,6 +378,7 @@ Use -- to pass options that may conflict with this CLI.
     baseURL = args["base-URL"] || "http://localhost:11434/v1";
   }
   debug && console.debug({ args, model, baseURL, extraCommitArgs });
+  debug && console.time("git diff");
   let diff =
     await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
@@ -385,6 +386,7 @@ Use -- to pass options that may conflict with this CLI.
     const lastCommitDiff = await daxSilent`git show --unified=${unified} --pretty=format: HEAD`;
     diff += "\n" + lastCommitDiff;
   }
+  debug && console.timeEnd("git diff");
   debug && console.debug({ diff });
 
   if (!diff) {
@@ -408,7 +410,9 @@ Use -- to pass options that may conflict with this CLI.
   }
   let commits = "";
   if (commitsToLearn > 0) {
+    debug && console.time("git log");
     commits = await daxSilent`git log --oneline -n ${commitsToLearn}`;
+    debug && console.timeEnd("git log");
     debug && console.debug({ commits });
   }
 
@@ -433,6 +437,7 @@ Use -- to pass options that may conflict with this CLI.
     systemContent += `\nYou should follow the commit style of these commits:\n${commits}`;
   }
 
+  debug && console.time("gpt");
   let commitMessage: string = await gpt({
     model,
     apiKey,
@@ -440,6 +445,7 @@ Use -- to pass options that may conflict with this CLI.
     content: diff,
     systemContent,
   });
+  debug && console.timeEnd("gpt");
   commitMessage = commitMessage
     ?.trim()
     .replace(/(^['"`]|$['"`])/, "")
