@@ -6,6 +6,16 @@ Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () 
   assertEquals(collectExtraCommitArgs(args), ["--no-verify"]);
 });
 
+Deno.test("collectExtraCommitArgs skips --provider with value", () => {
+  const args = ["--provider", "openai", "--no-verify"];
+  assertEquals(collectExtraCommitArgs(args), ["--no-verify"]);
+});
+
+Deno.test("collectExtraCommitArgs skips -p with value", () => {
+  const args = ["-p", "anthropic", "--no-verify"];
+  assertEquals(collectExtraCommitArgs(args), ["--no-verify"]);
+});
+
 Deno.test("collectExtraCommitArgs forwards unknown short flags", () => {
   const args = ["-n", "--add", "-v"];
   assertEquals(collectExtraCommitArgs(args), ["-n", "-v"]);

@@ -2,6 +2,7 @@ import $ from "jsr:@david/dax@0.42.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { join } from "jsr:@std/path@1.0.6";
 import { gpt } from "./gpt.ts";
+import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
 
 async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -24,7 +25,6 @@ async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
 const KNOWN_BOOLEAN_LONG = new Set([
   "add",
   "push",
-  "ollama",
   "debug",
   "config",
   "skip-edit",
@@ -40,11 +40,11 @@ const KNOWN_STRING_LONG = new Set([
   "max-words",
   "commits-to-learn",
   "unified",
+  "provider",
 ]);
 const KNOWN_BOOLEAN_SHORT = new Set([
   "A",
   "P",
-  "O",
   "D",
   "C",
   "S",
@@ -53,7 +53,7 @@ const KNOWN_BOOLEAN_SHORT = new Set([
   "V",
   "E",
 ]);
-const KNOWN_STRING_SHORT = new Set(["K", "M", "B", "W", "L", "U"]);
+const KNOWN_STRING_SHORT = new Set(["K", "M", "B", "W", "L", "U", "p"]);
 
 export function collectExtraCommitArgs(argv: string[]): string[] {
   const extras: string[] = [];
@@ -192,7 +192,6 @@ export async function commit(): Promise<void> {
     boolean: [
       "add",
       "push",
-      "ollama",
       "debug",
       "config",
       "skip-edit",
@@ -208,12 +207,12 @@ export async function commit(): Promise<void> {
       "max-words",
       "commits-to-learn",
       "unified",
+      "provider",
     ],
     alias: {
       "add": "A",
       "push": "P",
       "amend": "E",
-      "ollama": "O",
       "debug": "D",
       "config": "C",
       "skip-edit": "S",
@@ -226,6 +225,7 @@ export async function commit(): Promise<void> {
       "commits-to-learn": "L",
       "unified": "U",
       "version": "V",
+      "provider": "p",
     },
   });
   const extraCommitArgs = [
@@ -234,12 +234,13 @@ export async function commit(): Promise<void> {
   ];
   const DEFAULTS = `{
   "api-key": "",
-  "model": "gpt-5-nano",
+  "model": "",
   "max-words": 10000,
   "base-URL": "",
   "commits-to-learn": 10,
   "unified": 10,
-  "debug": false
+  "debug": false,
+  "provider": "openai"
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
   const configSaved = JSON.parse(
@@ -248,8 +249,26 @@ export async function commit(): Promise<void> {
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
-  let model = args.model || configSaved.model; // || 'gpt-4o-mini';
-  let baseURL: string | undefined = args["base-URL"] || configSaved["base-URL"];
+
+  // Provider resolution
+  const providerName: string = args.provider || configSaved.provider || "openai";
+  if (!VALID_PROVIDERS.includes(providerName)) {
+    console.error(
+      `Unknown provider: "${providerName}". Valid providers: ${VALID_PROVIDERS.join(", ")}`
+    );
+    Deno.exit(1);
+  }
+  const provider = PROVIDERS[providerName];
+  const providerExplicit = Boolean(args.provider);
+
+  // When --provider is explicitly passed on CLI, ignore saved model/baseURL to avoid cross-provider mismatches
+  let model = args.model ||
+    (!providerExplicit ? configSaved.model : undefined) ||
+    provider.defaultModel;
+  let baseURL: string | undefined = args["base-URL"] ||
+    (!providerExplicit ? configSaved["base-URL"] : undefined) ||
+    provider.baseURL ||
+    undefined;
 
   if (args.help) {
     console.info(`Usage: commit [options]
@@ -263,14 +282,14 @@ Use -- to pass options that may conflict with this CLI.
 -E, --amend: Runs git commit --amend instead of git commit.
 -L, --commits-to-learn: default is 10. Number of commits to learn from.
 -S, --skip-edit: Skips the editing of the commit message before creating the commit.
--N, --no-commit: Skips the creation of the commit.Just prints the commit message.
--M, --model <model>: Specifies the model to use for generating the commit message.The default is gpt-4o.
+-N, --no-commit: Skips the creation of the commit. Just prints the commit message.
+-M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
 -C, --config: Prompts for the default options and saves them.
--K, --api-key <apiKey>: Specifies the OpenAI API key to use. This will override the value set in the OPENAI_API_KEY environment variable.
--W, --max-words <maxWords>: Specifies the maximum number of words to call the api.The default is 6000. Is useful to no incur in extra charges.
--B, --base-URL <baseURL>: Specifies the base URL to use for the OpenAI API.This will override the default base URL.
--O, --ollama: Uses the llama3 model and sets the base URL to 'http://localhost:11434/v1'.
+-p, --provider <provider>: Specifies the AI provider. Options: openai (default), gemini, ollama, anthropic.
+-K, --api-key <apiKey>: Specifies the API key. Overrides the provider's env var (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY).
+-W, --max-words <maxWords>: Specifies the maximum number of words to call the api. The default is 10000.
+-B, --base-URL <baseURL>: Specifies a custom base URL for the provider API.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -295,7 +314,9 @@ Use -- to pass options that may conflict with this CLI.
     return;
   }
   const apiKey =
-    args["api-key"] || configSaved["api-key"] || Deno.env.get("OPENAI_API_KEY");
+    args["api-key"] ||
+    configSaved["api-key"] ||
+    (provider.envVar ? Deno.env.get(provider.envVar) : undefined);
   configSaved["api-key"] = apiKey;
 
   if (args.config) {
@@ -318,11 +339,15 @@ Use -- to pass options that may conflict with this CLI.
     }
 
     const newConfig = {
+      provider: await prompt(
+        `Enter provider (${VALID_PROVIDERS.join(", ")})`,
+        { default: configSaved["provider"] || "openai" }
+      ),
       "api-key": await prompt(
-        "Enter openai api key\nhttps://platform.openai.com/api-keys\n",
+        "Enter API key for the selected provider",
         { default: configSaved["api-key"], mask: true }
       ),
-      model: await prompt("Enter model", { default: configSaved["model"] }),
+      model: await prompt("Enter model (leave empty to use provider default)", { default: configSaved["model"] }),
       "max-words": Number(
         await prompt("Enter max-words", { default: configSaved["max-words"] })
       ),
@@ -350,9 +375,9 @@ Use -- to pass options that may conflict with this CLI.
     return;
   }
 
-  if (!apiKey) {
+  if (!apiKey && provider.requiresApiKey) {
     configSaved["api-key"] = await $.prompt(
-      "Not api-key found. Enter OpenAI API Key",
+      `No API key found. Enter ${providerName} API key`,
       {
         mask: true,
       }
@@ -373,11 +398,7 @@ Use -- to pass options that may conflict with this CLI.
     }
   }
 
-  if (args.ollama) {
-    model = args.model || "llama3";
-    baseURL = args["base-URL"] || "http://localhost:11434/v1";
-  }
-  debug && console.debug({ args, model, baseURL, extraCommitArgs });
+  debug && console.debug({ args, providerName, model, baseURL, extraCommitArgs });
   debug && console.time("git diff");
   let diff =
     await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
@@ -438,13 +459,25 @@ Use -- to pass options that may conflict with this CLI.
   }
 
   debug && console.time("gpt");
-  let commitMessage: string = await gpt({
-    model,
-    apiKey,
-    baseURL,
-    content: diff,
-    systemContent,
-  });
+  let commitMessage: string;
+  if (provider.sdk === "anthropic") {
+    const { anthropicComplete } = await import("./anthropic.ts");
+    commitMessage = await anthropicComplete({
+      model,
+      apiKey: apiKey || "",
+      baseURL,
+      content: diff,
+      systemContent,
+    });
+  } else {
+    commitMessage = await gpt({
+      model,
+      apiKey: apiKey || "",
+      baseURL,
+      content: diff,
+      systemContent,
+    });
+  }
   debug && console.timeEnd("gpt");
   commitMessage = commitMessage
     ?.trim()
