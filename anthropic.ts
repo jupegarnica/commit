@@ -1,4 +1,4 @@
-import Anthropic from "npm:@anthropic-ai/sdk";
+import Anthropic from "npm:@anthropic-ai/sdk@0.80.0";
 
 export async function anthropicComplete({
   model,
