@@ -1,4 +1,5 @@
 import $ from "jsr:@david/dax@0.42.0";
+import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { join } from "jsr:@std/path@1.0.6";
 import { gpt } from "./gpt.ts";
@@ -281,7 +282,7 @@ Use -- to pass options that may conflict with this CLI.
 -P, --push: Runs git push after the commit creation.
 -E, --amend: Runs git commit --amend instead of git commit.
 -L, --commits-to-learn: default is 10. Number of commits to learn from.
--S, --skip-edit: Skips the editing of the commit message before creating the commit.
+-S, --skip-edit: Skips the interactive preview and the editing of the commit message before creating the commit.
 -N, --no-commit: Skips the creation of the commit. Just prints the commit message.
 -M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
@@ -458,48 +459,65 @@ Use -- to pass options that may conflict with this CLI.
     systemContent += `\nYou should follow the commit style of these commits:\n${commits}`;
   }
 
-  debug && console.time("gpt");
-  let commitMessage: string;
-  if (provider.sdk === "anthropic") {
-    const { anthropicComplete } = await import("./anthropic.ts");
-    commitMessage = await anthropicComplete({
+  let commitMessage = "";
+
+  while (true) {
+    commitMessage = await generateCommitMessage({
+      provider,
       model,
       apiKey: apiKey || "",
       baseURL,
-      content: diff,
+      diff,
       systemContent,
+      debug,
     });
-  } else {
-    commitMessage = await gpt({
-      model,
-      apiKey: apiKey || "",
-      baseURL,
-      content: diff,
-      systemContent,
+
+    if (!commitMessage) {
+      console.error("No commitMessage");
+      Deno.exit(1);
+    }
+
+    if (args["no-commit"]) {
+      console.info(commitMessage);
+      return;
+    }
+
+    if (args["skip-edit"]) {
+      break;
+    }
+
+    console.log(`\n${commitMessage}\n`);
+
+    const action = await $.select({
+      message: "What would you like to do?",
+      options: ["Confirm", "Edit", "Retry (regenerate)", "Reject (abort)"],
     });
-  }
-  debug && console.timeEnd("gpt");
-  commitMessage = commitMessage
-    ?.trim()
-    .replace(/(^['"`]|$['"`])/, "")
-    .replace(/`/g, "'");
-  debug && console.debug({ commitMessage });
-  if (!commitMessage) {
-    console.error("No commitMessage");
-    Deno.exit(1);
+
+    if (action === 0) {
+      break;
+    } else if (action === 1) {
+      commitMessage = await Input.prompt({
+        message: "Edit commit message",
+        default: commitMessage,
+      });
+      if (!commitMessage) {
+        console.error("No commitMessage");
+        Deno.exit(1);
+      }
+      break;
+    } else if (action === 2) {
+      continue;
+    } else {
+      console.info("Commit aborted.");
+      return;
+    }
   }
 
-  if (args["no-commit"]) {
-    console.info(commitMessage);
-    return;
-  }
   const commitArgs = ["commit", ...extraCommitArgs];
   if (args.amend) {
     commitArgs.push("--amend");
   }
-  if (!args["skip-edit"]) {
-    commitArgs.push("--edit");
-  }
+  
   commitArgs.push("-m", commitMessage);
   await runCommand("git", commitArgs);
 
@@ -520,4 +538,44 @@ async function prompt(
   options.default = String(options.default);
   const result = await $.prompt(`${message}`, options);
   return String(result).trim();
+}
+
+async function generateCommitMessage(opts: {
+  provider: { sdk: string };
+  model: string;
+  apiKey: string;
+  baseURL: string | undefined;
+  diff: string;
+  systemContent: string;
+  debug: boolean;
+}): Promise<string> {
+  const { provider, model, apiKey, baseURL, diff, systemContent, debug } =
+    opts;
+  debug && console.time("gpt");
+  let commitMessage: string;
+  if (provider.sdk === "anthropic") {
+    const { anthropicComplete } = await import("./anthropic.ts");
+    commitMessage = await anthropicComplete({
+      model,
+      apiKey,
+      baseURL,
+      content: diff,
+      systemContent,
+    });
+  } else {
+    commitMessage = await gpt({
+      model,
+      apiKey,
+      baseURL,
+      content: diff,
+      systemContent,
+    });
+  }
+  debug && console.timeEnd("gpt");
+  commitMessage = commitMessage
+    ?.trim()
+    .replace(/(^['"`]|$['"`])/, "")
+    .replace(/`/g, "'");
+  debug && console.debug({ commitMessage });
+  return commitMessage;
 }
