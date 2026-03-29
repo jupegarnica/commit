@@ -154,7 +154,9 @@ export function hasNoVerifyFlag(extraCommitArgs: string[]): boolean {
 }
 
 async function getPreCommitHookPath(): Promise<string | null> {
-  const hookPath = (await daxSilent`git rev-parse --git-path hooks/pre-commit`).trim();
+  const hookPath = (
+    await daxSilent`git rev-parse --git-path hooks/pre-commit`
+  ).trim();
   if (!hookPath) {
     return null;
   }
@@ -211,22 +213,22 @@ export async function commit(): Promise<void> {
       "provider",
     ],
     alias: {
-      "add": "A",
-      "push": "P",
-      "amend": "E",
-      "debug": "D",
-      "config": "C",
+      add: "A",
+      push: "P",
+      amend: "E",
+      debug: "D",
+      config: "C",
       "skip-edit": "S",
       "no-commit": "N",
-      "help": "H",
+      help: "H",
       "api-key": "K",
-      "model": "M",
+      model: "M",
       "base-URL": "B",
       "max-words": "W",
       "commits-to-learn": "L",
-      "unified": "U",
-      "version": "V",
-      "provider": "p",
+      unified: "U",
+      version: "V",
+      provider: "p",
     },
   });
   const extraCommitArgs = [
@@ -245,17 +247,18 @@ export async function commit(): Promise<void> {
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
   const configSaved = JSON.parse(
-    localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS
+    localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS,
   );
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
 
   // Provider resolution
-  const providerName: string = args.provider || configSaved.provider || "openai";
+  const providerName: string =
+    args.provider || configSaved.provider || "openai";
   if (!VALID_PROVIDERS.includes(providerName)) {
     console.error(
-      `Unknown provider: "${providerName}". Valid providers: ${VALID_PROVIDERS.join(", ")}`
+      `Unknown provider: "${providerName}". Valid providers: ${VALID_PROVIDERS.join(", ")}`,
     );
     Deno.exit(1);
   }
@@ -263,10 +266,12 @@ export async function commit(): Promise<void> {
   const providerExplicit = Boolean(args.provider);
 
   // When --provider is explicitly passed on CLI, ignore saved model/baseURL to avoid cross-provider mismatches
-  let model = args.model ||
+  let model =
+    args.model ||
     (!providerExplicit ? configSaved.model : undefined) ||
     provider.defaultModel;
-  let baseURL: string | undefined = args["base-URL"] ||
+  let baseURL: string | undefined =
+    args["base-URL"] ||
     (!providerExplicit ? configSaved["base-URL"] : undefined) ||
     provider.baseURL ||
     undefined;
@@ -307,7 +312,7 @@ Use -- to pass options that may conflict with this CLI.
       version = json.version;
     } else {
       version = JSON.parse(
-        await Deno.readTextFile(new URL("./deno.json", import.meta.url))
+        await Deno.readTextFile(new URL("./deno.json", import.meta.url)),
       ).version;
     }
     debug && console.debug("import.meta.url", import.meta.url);
@@ -323,7 +328,7 @@ Use -- to pass options that may conflict with this CLI.
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
     const configChanged = Object.keys(configSaved).some(
-      (key) => configSaved[key] !== defaultConfig[key]
+      (key) => configSaved[key] !== defaultConfig[key],
     );
 
     if (configChanged) {
@@ -340,17 +345,18 @@ Use -- to pass options that may conflict with this CLI.
     }
 
     const newConfig = {
-      provider: await prompt(
-        `Enter provider (${VALID_PROVIDERS.join(", ")})`,
-        { default: configSaved["provider"] || "openai" }
-      ),
-      "api-key": await prompt(
-        "Enter API key for the selected provider",
-        { default: configSaved["api-key"], mask: true }
-      ),
-      model: await prompt("Enter model (leave empty to use provider default)", { default: configSaved["model"] }),
+      provider: await prompt(`Enter provider (${VALID_PROVIDERS.join(", ")})`, {
+        default: configSaved["provider"] || "openai",
+      }),
+      "api-key": await prompt("Enter API key for the selected provider", {
+        default: configSaved["api-key"],
+        mask: true,
+      }),
+      model: await prompt("Enter model (leave empty to use provider default)", {
+        default: configSaved["model"],
+      }),
       "max-words": Number(
-        await prompt("Enter max-words", { default: configSaved["max-words"] })
+        await prompt("Enter max-words", { default: configSaved["max-words"] }),
       ),
       "base-URL": await prompt("Enter base-URL", {
         default: configSaved["base-URL"],
@@ -358,12 +364,12 @@ Use -- to pass options that may conflict with this CLI.
       "commits-to-learn": Number(
         await prompt("Enter commits-to-learn", {
           default: configSaved["commits-to-learn"],
-        })
+        }),
       ),
       unified: Number(
         await prompt("Enter unified (lines of context in diff)", {
           default: configSaved["unified"],
-        })
+        }),
       ),
       debug:
         (await prompt("Enter debug", { default: configSaved["debug"] })) ===
@@ -381,7 +387,7 @@ Use -- to pass options that may conflict with this CLI.
       `No API key found. Enter ${providerName} API key`,
       {
         mask: true,
-      }
+      },
     );
     localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
     console.info("API Key saved, use --config to change it.");
@@ -399,13 +405,15 @@ Use -- to pass options that may conflict with this CLI.
     }
   }
 
-  debug && console.debug({ args, providerName, model, baseURL, extraCommitArgs });
+  debug &&
+    console.debug({ args, providerName, model, baseURL, extraCommitArgs });
   debug && console.time("git diff");
   let diff =
     await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
   if (args.amend) {
-    const lastCommitDiff = await daxSilent`git show --unified=${unified} --pretty=format: HEAD`;
+    const lastCommitDiff =
+      await daxSilent`git show --unified=${unified} --pretty=format: HEAD`;
     diff += "\n" + lastCommitDiff;
   }
   debug && console.timeEnd("git diff");
@@ -413,7 +421,7 @@ Use -- to pass options that may conflict with this CLI.
 
   if (!diff) {
     console.error(
-      "No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files."
+      "No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files.",
     );
     return Deno.exit(1);
   }
@@ -513,11 +521,15 @@ Use -- to pass options that may conflict with this CLI.
     }
   }
 
-  const commitArgs = ["commit", ...extraCommitArgs];
+  const commitArgs = [
+    "commit",
+    "--no-verify", // Skip pre-commit hooks since we've already run them (if they exist) and to prevent potential infinite loops with hooks that modify the commit message or staged files.
+    ...extraCommitArgs,
+  ];
   if (args.amend) {
     commitArgs.push("--amend");
   }
-  
+
   commitArgs.push("-m", commitMessage);
   await runCommand("git", commitArgs);
 
@@ -532,7 +544,7 @@ if (import.meta.main) {
 
 async function prompt(
   message: string,
-  options: { default?: string; mask?: boolean; noClear?: boolean } = {}
+  options: { default?: string; mask?: boolean; noClear?: boolean } = {},
 ): Promise<string> {
   options.noClear = true;
   options.default = String(options.default);
@@ -549,8 +561,7 @@ async function generateCommitMessage(opts: {
   systemContent: string;
   debug: boolean;
 }): Promise<string> {
-  const { provider, model, apiKey, baseURL, diff, systemContent, debug } =
-    opts;
+  const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
   debug && console.time("gpt");
   let commitMessage: string;
   if (provider.sdk === "anthropic") {
