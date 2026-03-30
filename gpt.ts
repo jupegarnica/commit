@@ -1,7 +1,7 @@
 import OpenAI from "npm:openai@4.38.3";
 import Anthropic from "npm:@anthropic-ai/sdk@0.80.0";
-import { Ollama } from "npm:ollama";
-import { GoogleGenAI } from "npm:@google/genai";
+import { Ollama } from "npm:ollama@0.6.3";
+import { GoogleGenAI } from "npm:@google/genai@1.47.0";
 
 export async function askLLM({
   model,

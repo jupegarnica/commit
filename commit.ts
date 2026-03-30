@@ -354,11 +354,7 @@ Use -- to pass options that may conflict with this CLI.
         ? `env var ${provider.envVar}`
         : "(no API)";
 
-  console.info(
-    colors.gray(
-    `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
-    ),
-  );
+
 
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
@@ -464,7 +460,11 @@ Use -- to pass options that may conflict with this CLI.
       await runCommand("git", ["hook", "run", "pre-commit"]);
     }
   }
-
+  console.info(
+    colors.gray(
+    `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
+    ),
+  );
   debug &&
     console.debug({ args, providerName, model, baseURL, extraCommitArgs });
   debug && console.time("git diff");
