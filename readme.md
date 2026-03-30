@@ -38,18 +38,20 @@ commit [OPTIONS]
 - `--no-commit`: Skips the creation of the commit. Just prints the commit
   message.
 - `--provider <provider>`, `-p`: Specifies the AI provider to use. Valid
-  options: `openai` (default), `gemini`, `ollama`, `anthropic`. Each provider
-  has its own default model and environment variable for the API key.
+  options: `openai` (default), `gemini`, `ollama`, `ollama-cloud`, `anthropic`.
+  Each provider has its own default model and environment variable for the API
+  key.
 - `--model <model>`: Specifies the model to use. Defaults to the provider's
   default model.
 - `--config`: Prompts for the default options and saves them.
 - `--api-key <apiKey>`: Specifies the API key to use. Overrides the provider's
   environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`,
-  `ANTHROPIC_API_KEY`, etc.).
+  `ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, etc.).
 - `--max-words <maxWords>`: Specifies the maximum number of words to send to the
   API. The default is 6000. Useful to avoid extra charges.
 - `--base-URL <baseURL>`: Specifies a custom base URL for the provider API.
-  Overrides the provider's default.
+  Overrides the provider's default. For `ollama`, can also be set via
+  `OLLAMA_BASE_URL`. Required for the `ollama` provider if not already saved.
 - `--debug`: Enables debug mode, which will print additional information to the
   console.
 - `--help`: Prints the help message.
@@ -60,21 +62,32 @@ If an option conflicts with this CLI, pass it after `--`.
 
 ### Providers
 
-| Provider    | Default model                  | API key env var       |
-| ----------- | ------------------------------ | --------------------- |
-| `openai`    | `gpt-5-nano`                   | `OPENAI_API_KEY`      |
-| `gemini`    | `gemini-2.0-flash`             | `GEMINI_API_KEY`      |
-| `ollama`    | `kimi-k2.5:cloud`              | *(not required)*      |
-| `anthropic` | `claude-sonnet-4-20250514`     | `ANTHROPIC_API_KEY`   |
+| Provider       | Default model              | API key env var     | Base URL env var   |
+| -------------- | -------------------------- | ------------------- | ------------------ |
+| `openai`       | `gpt-5-nano`               | `OPENAI_API_KEY`    |                    |
+| `gemini`       | `gemini-2.0-flash`         | `GEMINI_API_KEY`    |                    |
+| `ollama`       | `llama3`                   | *(not required)*    | `OLLAMA_BASE_URL`  |
+| `ollama-cloud` | `kimi-k2.5:cloud`          | `OLLAMA_API_KEY`    |                    |
+| `anthropic`    | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |                    |
 
-When `--provider` is passed explicitly on the CLI, any saved `model` or
-`base-URL` config values are ignored to avoid cross-provider mismatches.
+The `ollama` provider requires a base URL (your local Ollama instance). It is
+read from `OLLAMA_BASE_URL`, `--base-URL`, a saved `--config` value, or
+prompted interactively if none are found.
+
+The `ollama-cloud` provider requires an API key read from `OLLAMA_API_KEY`,
+`--api-key`, or a saved `--config` value.
+
+When `--provider` is passed explicitly on the CLI, any saved `model` config
+value is ignored to avoid cross-provider mismatches. The saved `base-URL` is
+still used for providers that require it (e.g. `ollama`).
 
 ### Environment Variables
 
 - `OPENAI_API_KEY`: API key for the OpenAI provider.
 - `GEMINI_API_KEY`: API key for the Gemini provider.
 - `ANTHROPIC_API_KEY`: API key for the Anthropic provider.
+- `OLLAMA_API_KEY`: API key for the `ollama-cloud` provider.
+- `OLLAMA_BASE_URL`: Base URL for the local `ollama` provider (e.g. `http://localhost:11434/v1`).
 
 ## Example
 
@@ -99,7 +112,13 @@ GEMINI_API_KEY=your_api_key_here commit --provider gemini --add --push
 Using a local Ollama instance:
 
 ```sh
-commit --provider ollama
+OLLAMA_BASE_URL=http://localhost:11434/v1 commit --provider ollama
+```
+
+Using Ollama Cloud:
+
+```sh
+OLLAMA_API_KEY=your_api_key_here commit --provider ollama-cloud
 ```
 
 Passing extra `git commit` options:

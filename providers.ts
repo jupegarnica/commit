@@ -2,7 +2,9 @@ export interface ProviderConfig {
   defaultModel: string;
   envVar: string;
   requiresApiKey: boolean;
+  requiresBaseUrl?: boolean;
   baseURL?: string;
+  baseURLEnvVar?: string;
   sdk: "openai" | "anthropic";
 }
 
@@ -21,10 +23,18 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     sdk: "openai",
   },
   ollama: {
+    defaultModel: "llama3",
+    envVar: "",
+    requiresApiKey: false,
+    requiresBaseUrl: true,
+    baseURLEnvVar: "OLLAMA_BASE_URL",
+    sdk: "openai",
+  },
+  "ollama-cloud": {
     defaultModel: "kimi-k2.5:cloud",
     envVar: "OLLAMA_API_KEY",
-    requiresApiKey: false,
-    baseURL: "http://localhost:11434/v1",
+    requiresApiKey: true,
+    baseURL: "https://api.ollama.ai/v1",
     sdk: "openai",
   },
   anthropic: {

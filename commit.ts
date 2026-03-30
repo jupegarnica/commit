@@ -272,7 +272,10 @@ export async function commit(): Promise<void> {
     provider.defaultModel;
   let baseURL: string | undefined =
     args["base-URL"] ||
-    (!providerExplicit ? configSaved["base-URL"] : undefined) ||
+    (provider.baseURLEnvVar ? Deno.env.get(provider.baseURLEnvVar) : undefined) ||
+    (!providerExplicit || provider.requiresBaseUrl
+      ? configSaved["base-URL"]
+      : undefined) ||
     provider.baseURL ||
     undefined;
 
@@ -292,10 +295,10 @@ Use -- to pass options that may conflict with this CLI.
 -M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
 -C, --config: Prompts for the default options and saves them.
--p, --provider <provider>: Specifies the AI provider. Options: openai (default), gemini, ollama, anthropic.
--K, --api-key <apiKey>: Specifies the API key. Overrides the provider's env var (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY).
+-p, --provider <provider>: Specifies the AI provider. Options: openai (default), gemini, ollama, ollama-cloud, anthropic.
+-K, --api-key <apiKey>: Specifies the API key. Overrides the provider's env var (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_API_KEY).
+-B, --base-URL <baseURL>: Specifies a custom base URL for the provider API. For ollama, can also be set via OLLAMA_BASE_URL env var.
 -W, --max-words <maxWords>: Specifies the maximum number of words to call the api. The default is 10000.
--B, --base-URL <baseURL>: Specifies a custom base URL for the provider API.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -391,6 +394,15 @@ Use -- to pass options that may conflict with this CLI.
     );
     localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
     console.info("API Key saved, use --config to change it.");
+  }
+
+  if (!baseURL && provider.requiresBaseUrl) {
+    baseURL = await $.prompt(
+      `No base URL found. Enter ${providerName} base URL`,
+    );
+    configSaved["base-URL"] = baseURL;
+    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+    console.info("Base URL saved, use --config to change it.");
   }
 
   if (args.add) {
