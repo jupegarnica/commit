@@ -16,13 +16,13 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     sdk: "openai",
   },
   gemini: {
-    defaultModel: "gemini-3-flash",
+    defaultModel: "gemini-3-flash-preview",
     envVar: "GEMINI_API_KEY",
     requiresApiKey: true,
     sdk: "gemini",
   },
   ollama: {
-    defaultModel: "kimi-k2.5:cloud",
+    defaultModel: "llama3.2:3b",
     envVar: "",
     requiresApiKey: false,
     requiresBaseUrl: true,

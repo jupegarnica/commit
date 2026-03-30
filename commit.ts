@@ -1,4 +1,5 @@
 import $ from "jsr:@david/dax@0.42.0";
+import * as colors from "jsr:/@std/fmt@1/colors";
 import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
@@ -226,19 +227,42 @@ export async function commit(): Promise<void> {
     ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),
   ];
   const DEFAULTS = `{
-  "api-key": "",
-  "model": "",
   "max-words": 10000,
-  "base-URL": "",
   "commits-to-learn": 10,
   "unified": 10,
   "debug": false,
-  "provider": "openai"
+  "provider": "openai",
+  "providers": {
+    "openai": { "api-key": "", "model": "", "base-URL": "" },
+    "gemini": { "api-key": "", "model": "", "base-URL": "" },
+    "anthropic": { "api-key": "", "model": "", "base-URL": "" },
+    "ollama": { "api-key": "", "model": "", "base-URL": "" },
+    "ollama-cloud": { "api-key": "", "model": "", "base-URL": "" }
+  }
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
   const configSaved = JSON.parse(
     localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS,
   );
+
+  // Migration for legacy config
+  if (!configSaved.providers) {
+    configSaved.providers = JSON.parse(DEFAULTS).providers;
+    if (configSaved["api-key"]) {
+      configSaved.providers.openai["api-key"] = configSaved["api-key"];
+      delete configSaved["api-key"];
+    }
+    if (configSaved["model"]) {
+      configSaved.providers.openai["model"] = configSaved["model"];
+      delete configSaved["model"];
+    }
+    if (configSaved["base-URL"]) {
+      configSaved.providers.openai["base-URL"] = configSaved["base-URL"];
+      delete configSaved["base-URL"];
+    }
+    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+  }
+
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
@@ -255,18 +279,21 @@ export async function commit(): Promise<void> {
   const provider = PROVIDERS[providerName];
   const providerExplicit = Boolean(args.provider);
 
+  const providerConfig = configSaved.providers[providerName] || {};
+
   // When --provider is explicitly passed on CLI, ignore saved model/baseURL to avoid cross-provider mismatches
   let model =
     args.model ||
-    (!providerExplicit ? configSaved.model : undefined) ||
+    (!providerExplicit ? providerConfig.model : undefined) ||
     provider.defaultModel;
+
   let baseURL: string | undefined =
     args["base-URL"] ||
     (provider.baseURLEnvVar
       ? Deno.env.get(provider.baseURLEnvVar)
       : undefined) ||
     (!providerExplicit || provider.requiresBaseUrl
-      ? configSaved["base-URL"]
+      ? providerConfig["base-URL"]
       : undefined) ||
     provider.baseURL ||
     undefined;
@@ -316,11 +343,22 @@ Use -- to pass options that may conflict with this CLI.
   }
   const apiKey =
     args["api-key"] ||
-    configSaved["api-key"] ||
+    providerConfig["api-key"] ||
     (provider.envVar ? Deno.env.get(provider.envVar) : undefined);
-  configSaved["api-key"] = apiKey;
 
-  console.debug({ apiKey, providerName, baseURL, model });
+  const readApiKeyFrom = args["api-key"]
+    ? "--api-key CLI argument"
+    : providerConfig["api-key"]
+      ? "saved config"
+      : provider.envVar
+        ? `env var ${provider.envVar}`
+        : "(no API)";
+
+  console.info(
+    colors.gray(
+    `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
+    ),
+  );
 
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
@@ -341,23 +379,24 @@ Use -- to pass options that may conflict with this CLI.
       }
     }
 
-    const newConfig = {
-      provider: await prompt(`Enter provider (${VALID_PROVIDERS.join(", ")})`, {
+    const selectedProvider = await prompt(
+      `Enter provider (${VALID_PROVIDERS.join(", ")})`,
+      {
         default: configSaved["provider"] || "openai",
-      }),
-      "api-key": await prompt("Enter API key for the selected provider", {
-        default: configSaved["api-key"],
-        mask: true,
-      }),
-      model: await prompt("Enter model (leave empty to use provider default)", {
-        default: configSaved["model"],
-      }),
+      },
+    );
+
+    const providerConfigToEdit = configSaved.providers[selectedProvider] || {
+      "api-key": "",
+      model: "",
+      "base-URL": "",
+    };
+
+    const newConfig = {
+      provider: selectedProvider,
       "max-words": Number(
         await prompt("Enter max-words", { default: configSaved["max-words"] }),
       ),
-      "base-URL": await prompt("Enter base-URL", {
-        default: configSaved["base-URL"],
-      }),
       "commits-to-learn": Number(
         await prompt("Enter commits-to-learn", {
           default: configSaved["commits-to-learn"],
@@ -371,6 +410,24 @@ Use -- to pass options that may conflict with this CLI.
       debug:
         (await prompt("Enter debug", { default: configSaved["debug"] })) ===
         "true",
+      providers: {
+        ...configSaved.providers,
+        [selectedProvider]: {
+          "api-key": await prompt(`Enter API key for ${selectedProvider}`, {
+            default: providerConfigToEdit["api-key"],
+            mask: true,
+          }),
+          model: await prompt(
+            `Enter model for ${selectedProvider} (leave empty to use provider default)`,
+            {
+              default: providerConfigToEdit["model"],
+            },
+          ),
+          "base-URL": await prompt(`Enter base-URL for ${selectedProvider}`, {
+            default: providerConfigToEdit["base-URL"],
+          }),
+        },
+      },
     };
 
     localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(newConfig));
@@ -379,24 +436,21 @@ Use -- to pass options that may conflict with this CLI.
     return;
   }
 
-  if (!apiKey && provider.requiresApiKey) {
-    configSaved["api-key"] = await $.prompt(
-      `No API key found. Enter ${providerName} API key`,
+  let finalApiKey = apiKey;
+  if (!finalApiKey && provider.requiresApiKey) {
+    finalApiKey = await $.prompt(
+      `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
       {
         mask: true,
       },
     );
-    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
-    console.info("API Key saved, use --config to change it.");
   }
 
-  if (!baseURL && provider.requiresBaseUrl) {
-    baseURL = await $.prompt(
-      `No base URL found. Enter ${providerName} base URL`,
+  let finalBaseURL = baseURL;
+  if (!finalBaseURL && provider.requiresBaseUrl) {
+    finalBaseURL = await $.prompt(
+      `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
     );
-    configSaved["base-URL"] = baseURL;
-    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
-    console.info("Base URL saved, use --config to change it.");
   }
 
   if (args.add) {
@@ -479,8 +533,8 @@ Use -- to pass options that may conflict with this CLI.
     commitMessage = await generateCommitMessage({
       provider,
       model,
-      apiKey: apiKey || "",
-      baseURL,
+      apiKey: finalApiKey || "",
+      baseURL: finalBaseURL,
       diff,
       systemContent,
       debug,

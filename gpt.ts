@@ -50,7 +50,7 @@ export async function askLLM({
     const response = await ai.models.generateContent({
       model,
       config: { systemInstruction: systemContent },
-      contents: content,
+      contents: `${systemContent}\n\n${content}`,
     });
     return response.text ?? "";
   }
