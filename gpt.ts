@@ -49,7 +49,6 @@ export async function askLLM({
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model,
-      config: { systemInstruction: systemContent },
       contents: `${systemContent}\n\n${content}`,
     });
     return response.text ?? "";
