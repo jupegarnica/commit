@@ -1,18 +1,8 @@
 import $ from "jsr:@david/dax@0.42.0";
 import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
-import { join } from "jsr:@std/path@1.0.6";
-import { gpt } from "./gpt.ts";
+import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
-
-async function dax(strings: TemplateStringsArray, ...values: unknown[]) {
-  try {
-    return await $.raw(strings, ...values.map(String));
-  } catch (_error) {
-    // console.error(error.message);
-    Deno.exit(1);
-  }
-}
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -272,7 +262,9 @@ export async function commit(): Promise<void> {
     provider.defaultModel;
   let baseURL: string | undefined =
     args["base-URL"] ||
-    (provider.baseURLEnvVar ? Deno.env.get(provider.baseURLEnvVar) : undefined) ||
+    (provider.baseURLEnvVar
+      ? Deno.env.get(provider.baseURLEnvVar)
+      : undefined) ||
     (!providerExplicit || provider.requiresBaseUrl
       ? configSaved["base-URL"]
       : undefined) ||
@@ -327,6 +319,8 @@ Use -- to pass options that may conflict with this CLI.
     configSaved["api-key"] ||
     (provider.envVar ? Deno.env.get(provider.envVar) : undefined);
   configSaved["api-key"] = apiKey;
+
+  console.debug({ apiKey, providerName, baseURL, model });
 
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
@@ -565,7 +559,7 @@ async function prompt(
 }
 
 async function generateCommitMessage(opts: {
-  provider: { sdk: string };
+  provider: { sdk: "openai" | "anthropic" | "ollama" | "gemini" };
   model: string;
   apiKey: string;
   baseURL: string | undefined;
@@ -574,27 +568,16 @@ async function generateCommitMessage(opts: {
   debug: boolean;
 }): Promise<string> {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
-  debug && console.time("gpt");
-  let commitMessage: string;
-  if (provider.sdk === "anthropic") {
-    const { anthropicComplete } = await import("./anthropic.ts");
-    commitMessage = await anthropicComplete({
-      model,
-      apiKey,
-      baseURL,
-      content: diff,
-      systemContent,
-    });
-  } else {
-    commitMessage = await gpt({
-      model,
-      apiKey,
-      baseURL,
-      content: diff,
-      systemContent,
-    });
-  }
-  debug && console.timeEnd("gpt");
+  debug && console.time("askLLM");
+  let commitMessage = await askLLM({
+    model,
+    apiKey,
+    baseURL,
+    content: diff,
+    systemContent,
+    sdk: provider.sdk,
+  });
+  debug && console.timeEnd("askLLM");
   commitMessage = commitMessage
     ?.trim()
     .replace(/(^['"`]|$['"`])/, "")

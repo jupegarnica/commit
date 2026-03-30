@@ -5,7 +5,7 @@ export interface ProviderConfig {
   requiresBaseUrl?: boolean;
   baseURL?: string;
   baseURLEnvVar?: string;
-  sdk: "openai" | "anthropic";
+  sdk: "openai" | "anthropic" | "ollama" | "gemini";
 }
 
 export const PROVIDERS: Record<string, ProviderConfig> = {
@@ -16,29 +16,29 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     sdk: "openai",
   },
   gemini: {
-    defaultModel: "gemini-2.0-flash",
+    defaultModel: "gemini-3-flash",
     envVar: "GEMINI_API_KEY",
     requiresApiKey: true,
-    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-    sdk: "openai",
+    sdk: "gemini",
   },
   ollama: {
-    defaultModel: "llama3",
+    defaultModel: "kimi-k2.5:cloud",
     envVar: "",
     requiresApiKey: false,
     requiresBaseUrl: true,
     baseURLEnvVar: "OLLAMA_BASE_URL",
-    sdk: "openai",
+    baseURL: "http://127.0.0.1:11434",
+    sdk: "ollama",
   },
   "ollama-cloud": {
     defaultModel: "kimi-k2.5:cloud",
     envVar: "OLLAMA_API_KEY",
     requiresApiKey: true,
-    baseURL: "https://api.ollama.ai/v1",
-    sdk: "openai",
+    baseURL: "https://ollama.com",
+    sdk: "ollama",
   },
   anthropic: {
-    defaultModel: "claude-sonnet-4-20250514",
+    defaultModel: "claude-haiku-4-5",
     envVar: "ANTHROPIC_API_KEY",
     requiresApiKey: true,
     sdk: "anthropic",
