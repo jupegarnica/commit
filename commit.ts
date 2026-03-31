@@ -388,6 +388,26 @@ Use -- to pass options that may conflict with this CLI.
       "base-URL": "",
     };
 
+    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel || "";
+    const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
+
+    const newProviderConfig = {
+      "api-key": await prompt(
+        `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
+        {
+          default: providerConfigToEdit["api-key"],
+          mask: true,
+        },
+      ),
+      model: await prompt(
+        `Enter model for ${selectedProvider} (leave empty to use provider default, currently: ${providerDefaultModel})`,
+        {
+          default: providerConfigToEdit["model"],
+        },
+      ),
+      "base-URL": providerConfigToEdit["base-URL"],
+    };
+
     const newConfig = {
       provider: selectedProvider,
       "max-words": Number(
@@ -408,21 +428,7 @@ Use -- to pass options that may conflict with this CLI.
         "true",
       providers: {
         ...configSaved.providers,
-        [selectedProvider]: {
-          "api-key": await prompt(`Enter API key for ${selectedProvider}`, {
-            default: providerConfigToEdit["api-key"],
-            mask: true,
-          }),
-          model: await prompt(
-            `Enter model for ${selectedProvider} (leave empty to use provider default)`,
-            {
-              default: providerConfigToEdit["model"],
-            },
-          ),
-          "base-URL": await prompt(`Enter base-URL for ${selectedProvider}`, {
-            default: providerConfigToEdit["base-URL"],
-          }),
-        },
+        [selectedProvider]: newProviderConfig,
       },
     };
 
