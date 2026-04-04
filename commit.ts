@@ -391,21 +391,36 @@ Use -- to pass options that may conflict with this CLI.
     const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel || "";
     const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
 
+    const selectedProviderConfig = PROVIDERS[selectedProvider];
+    const requiresApiKey = selectedProviderConfig?.requiresApiKey ?? true;
+    const requiresBaseUrl = selectedProviderConfig?.requiresBaseUrl ?? false;
+    const providerBaseURLEnvVar = selectedProviderConfig?.baseURLEnvVar || "";
+    const providerDefaultBaseURL = selectedProviderConfig?.baseURL || "";
+
     const newProviderConfig = {
-      "api-key": await prompt(
-        `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
-        {
-          default: providerConfigToEdit["api-key"],
-          mask: true,
-        },
-      ),
+      "api-key": requiresApiKey
+        ? await prompt(
+            `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
+            {
+              default: providerConfigToEdit["api-key"],
+              mask: true,
+            },
+          )
+        : providerConfigToEdit["api-key"],
       model: await prompt(
         `Enter model for ${selectedProvider} (leave empty to use provider default, currently: ${providerDefaultModel})`,
         {
           default: providerConfigToEdit["model"],
         },
       ),
-      "base-URL": providerConfigToEdit["base-URL"],
+      "base-URL": requiresBaseUrl
+        ? await prompt(
+            `Enter base URL for ${selectedProvider}${providerBaseURLEnvVar ? ` or leave empty to read from ${providerBaseURLEnvVar}` : ""}`,
+            {
+              default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
+            },
+          )
+        : providerConfigToEdit["base-URL"],
     };
 
     const newConfig = {
