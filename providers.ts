@@ -22,7 +22,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
         sdk: "gemini",
     },
     ollama: {
-        defaultModel: "gemma4:e2b",
+        defaultModel: "gemma4:e4b",
         envVar: "",
         requiresApiKey: false,
         requiresBaseUrl: true,

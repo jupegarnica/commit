@@ -40,6 +40,8 @@ const KNOWN_BOOLEAN_SHORT = new Set([
   "D",
   "C",
   "S",
+  "Y",
+  "y",
   "N",
   "H",
   "V",
@@ -209,7 +211,7 @@ export async function commit(): Promise<void> {
       amend: "E",
       debug: "D",
       config: "C",
-      "skip-edit": "S",
+      "skip-edit": ["S", "Y", "y"],
       "no-commit": "N",
       help: "H",
       "api-key": "K",
@@ -309,7 +311,7 @@ Use -- to pass options that may conflict with this CLI.
 -P, --push: Runs git push after the commit creation.
 -E, --amend: Runs git commit --amend instead of git commit.
 -L, --commits-to-learn: default is 10. Number of commits to learn from.
--S, --skip-edit: Skips the interactive preview and the editing of the commit message before creating the commit.
+-S, -Y, -y, --skip-edit: Skips the interactive preview and the editing of the commit message before creating the commit.
 -N, --no-commit: Skips the creation of the commit. Just prints the commit message.
 -M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
