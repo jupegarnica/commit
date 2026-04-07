@@ -279,14 +279,12 @@ export async function commit(): Promise<void> {
     Deno.exit(1);
   }
   const provider = PROVIDERS[providerName];
-  const providerExplicit = Boolean(args.provider);
 
   const providerConfig = configSaved.providers[providerName] || {};
 
-  // When --provider is explicitly passed on CLI, ignore saved model/baseURL to avoid cross-provider mismatches
   let model =
     args.model ||
-    (!providerExplicit ? providerConfig.model : undefined) ||
+    providerConfig.model ||
     provider.defaultModel;
 
   let baseURL: string | undefined =
@@ -294,9 +292,7 @@ export async function commit(): Promise<void> {
     (provider.baseURLEnvVar
       ? Deno.env.get(provider.baseURLEnvVar)
       : undefined) ||
-    (!providerExplicit || provider.requiresBaseUrl
-      ? providerConfig["base-URL"]
-      : undefined) ||
+    providerConfig["base-URL"] ||
     provider.baseURL ||
     undefined;
 
