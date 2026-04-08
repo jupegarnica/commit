@@ -13,5 +13,10 @@
   "version": "0.0.33",
   "description": "conventional commit generator cli by AI",
   "exports": "./commit.ts",
-  "license": "MIT"
+  "license": "MIT",
+  "imports": {
+    "@garn/ink-html": "jsr:@garn/ink-html@^0.0.3",
+    "ink": "npm:ink@^7.0.0",
+    "react": "npm:react@^19.2.4"
+  }
 }
