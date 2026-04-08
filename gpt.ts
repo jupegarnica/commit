@@ -16,7 +16,7 @@ export async function askLLM({
   content: string;
   systemContent: string;
   baseURL?: string;
-  sdk: "openai" | "anthropic" | "ollama" | "gemini";
+  sdk: "openai" | "anthropic" | "ollama" | "google";
 }): Promise<string> {
   if (sdk === "anthropic") {
     const client = new Anthropic({ apiKey, baseURL });
@@ -45,7 +45,7 @@ export async function askLLM({
     return response.message.content;
   }
 
-  if (sdk === "gemini") {
+  if (sdk === "google") {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model,

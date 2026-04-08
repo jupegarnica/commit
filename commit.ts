@@ -236,7 +236,7 @@ export async function commit(): Promise<void> {
   "provider": "openai",
   "providers": {
     "openai": { "api-key": "", "model": "", "base-URL": "" },
-    "gemini": { "api-key": "", "model": "", "base-URL": "" },
+    "google": { "api-key": "", "model": "", "base-URL": "" },
     "anthropic": { "api-key": "", "model": "", "base-URL": "" },
     "ollama": { "api-key": "", "model": "", "base-URL": "" },
     "ollama-cloud": { "api-key": "", "model": "", "base-URL": "" }
@@ -312,7 +312,7 @@ Use -- to pass options that may conflict with this CLI.
 -M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
 -C, --config: Prompts for the default options and saves them.
--p, --provider <provider>: Specifies the AI provider. Options: openai (default), gemini, ollama, ollama-cloud, anthropic.
+-p, --provider <provider>: Specifies the AI provider. Options: openai (default), google, ollama, ollama-cloud, anthropic.
 -K, --api-key <apiKey>: Specifies the API key. Overrides the provider's env var (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_API_KEY).
 -B, --base-URL <baseURL>: Specifies a custom base URL for the provider API. For ollama, can also be set via OLLAMA_BASE_URL env var.
 -W, --max-words <maxWords>: Specifies the maximum number of words to call the api. The default is 10000.
@@ -632,7 +632,7 @@ async function prompt(
 }
 
 async function generateCommitMessage(opts: {
-  provider: { sdk: "openai" | "anthropic" | "ollama" | "gemini" };
+  provider: { sdk: "openai" | "anthropic" | "ollama" | "google" };
   model: string;
   apiKey: string;
   baseURL: string | undefined;

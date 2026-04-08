@@ -38,7 +38,7 @@ commit [OPTIONS]
 - `--no-commit`: Skips the creation of the commit. Just prints the commit
   message.
 - `--provider <provider>`, `-p`: Specifies the AI provider to use. Valid
-  options: `openai` (default), `gemini`, `ollama`, `ollama-cloud`, `anthropic`.
+  options: `openai` (default), `google`, `ollama`, `ollama-cloud`, `anthropic`.
   Each provider has its own default model and environment variable for the API
   key.
 - `--model <model>`: Specifies the model to use. Defaults to the provider's
@@ -65,7 +65,7 @@ If an option conflicts with this CLI, pass it after `--`.
 | Provider       | Default model              | API key env var     | Base URL env var   |
 | -------------- | -------------------------- | ------------------- | ------------------ |
 | `openai`       | `gpt-5-nano`               | `OPENAI_API_KEY`    |                    |
-| `gemini`       | `gemini-2.0-flash`         | `GEMINI_API_KEY`    |                    |
+| `google`       | `gemini-2.0-flash`         | `GEMINI_API_KEY`    |                    |
 | `ollama`       | `llama3`                   | *(not required)*    | `OLLAMA_BASE_URL`  |
 | `ollama-cloud` | `kimi-k2.5:cloud`          | `OLLAMA_API_KEY`    |                    |
 | `anthropic`    | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |                    |
@@ -84,7 +84,7 @@ still used for providers that require it (e.g. `ollama`).
 ### Environment Variables
 
 - `OPENAI_API_KEY`: API key for the OpenAI provider.
-- `GEMINI_API_KEY`: API key for the Gemini provider.
+- `GEMINI_API_KEY`: API key for the Google provider.
 - `ANTHROPIC_API_KEY`: API key for the Anthropic provider.
 - `OLLAMA_API_KEY`: API key for the `ollama-cloud` provider.
 - `OLLAMA_BASE_URL`: Base URL for the local `ollama` provider (e.g. `http://localhost:11434/v1`).
@@ -103,10 +103,10 @@ Using Anthropic Claude as the provider:
 ANTHROPIC_API_KEY=your_api_key_here commit --provider anthropic
 ```
 
-Using Gemini:
+Using Google:
 
 ```sh
-GEMINI_API_KEY=your_api_key_here commit --provider gemini --add --push
+GEMINI_API_KEY=your_api_key_here commit --provider google --add --push
 ```
 
 Using a local Ollama instance:

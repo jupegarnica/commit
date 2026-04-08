@@ -5,7 +5,7 @@ export interface ProviderConfig {
     requiresBaseUrl?: boolean;
     baseURL?: string;
     baseURLEnvVar?: string;
-    sdk: "openai" | "anthropic" | "ollama" | "gemini";
+    sdk: "openai" | "anthropic" | "ollama" | "google";
 }
 
 export const PROVIDERS: Record<string, ProviderConfig> = {
@@ -15,11 +15,11 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
         requiresApiKey: true,
         sdk: "openai",
     },
-    gemini: {
+    google: {
         defaultModel: "gemini-3-flash-preview",
         envVar: "GEMINI_API_KEY",
         requiresApiKey: true,
-        sdk: "gemini",
+        sdk: "google",
     },
     ollama: {
         defaultModel: "gemma4:e4b",
