@@ -270,13 +270,10 @@ export async function commit(): Promise<void> {
   const debug = args.debug || configSaved.debug;
 
   // Provider resolution
-  const providerName: string =
+  let providerName: string =
     args.provider || configSaved.provider || "openai";
   if (!VALID_PROVIDERS.includes(providerName)) {
-    console.error(
-      `Unknown provider: "${providerName}". Valid providers: ${VALID_PROVIDERS.join(", ")}`,
-    );
-    Deno.exit(1);
+    providerName = 'openai';
   }
   const provider = PROVIDERS[providerName];
 
