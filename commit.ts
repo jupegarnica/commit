@@ -1,9 +1,9 @@
 import $ from "jsr:@david/dax@0.42.0";
 import * as colors from "jsr:/@std/fmt@1/colors";
-import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
+import { input } from "./ui/input.tsx";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -177,12 +177,25 @@ async function runCommand(command: string, args: string[]) {
   }
 }
 
+async function inputPrompt(
+  label: string,
+  options: { default?: string; mask?: boolean } = {},
+): Promise<string> {
+  return (await input({
+    label,
+    defaultValue: options.default,
+    type: options.mask ? "password" : "text",
+  })).trim();
+}
+
 export async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
-  const argsToParse =
-    passthroughIndex === -1 ? Deno.args : Deno.args.slice(0, passthroughIndex);
-  const passthroughArgs =
-    passthroughIndex === -1 ? [] : Deno.args.slice(passthroughIndex + 1);
+  const argsToParse = passthroughIndex === -1
+    ? Deno.args
+    : Deno.args.slice(0, passthroughIndex);
+  const passthroughArgs = passthroughIndex === -1
+    ? []
+    : Deno.args.slice(passthroughIndex + 1);
 
   const args = parseArgs(argsToParse, {
     boolean: [
@@ -270,11 +283,13 @@ export async function commit(): Promise<void> {
   const debug = args.debug || configSaved.debug;
 
   // Provider resolution
-  const providerName: string =
-    args.provider || configSaved.provider || "openai";
+  const providerName: string = args.provider || configSaved.provider ||
+    "openai";
   if (!VALID_PROVIDERS.includes(providerName)) {
     console.error(
-      `Unknown provider: "${providerName}". Valid providers: ${VALID_PROVIDERS.join(", ")}`,
+      `Unknown provider: "${providerName}". Valid providers: ${
+        VALID_PROVIDERS.join(", ")
+      }`,
     );
     Deno.exit(1);
   }
@@ -282,13 +297,9 @@ export async function commit(): Promise<void> {
 
   const providerConfig = configSaved.providers[providerName] || {};
 
-  let model =
-    args.model ||
-    providerConfig.model ||
-    provider.defaultModel;
+  let model = args.model || providerConfig.model || provider.defaultModel;
 
-  let baseURL: string | undefined =
-    args["base-URL"] ||
+  let baseURL: string | undefined = args["base-URL"] ||
     (provider.baseURLEnvVar
       ? Deno.env.get(provider.baseURLEnvVar)
       : undefined) ||
@@ -339,20 +350,17 @@ Use -- to pass options that may conflict with this CLI.
     console.info(version);
     return;
   }
-  const apiKey =
-    args["api-key"] ||
+  const apiKey = args["api-key"] ||
     providerConfig["api-key"] ||
     (provider.envVar ? Deno.env.get(provider.envVar) : undefined);
 
   const readApiKeyFrom = args["api-key"]
     ? "--api-key CLI argument"
     : providerConfig["api-key"]
-      ? "saved config"
-      : provider.envVar
-        ? `env var ${provider.envVar}`
-        : "(no API)";
-
-
+    ? "saved config"
+    : provider.envVar
+    ? `env var ${provider.envVar}`
+    : "(no API)";
 
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
@@ -373,12 +381,12 @@ Use -- to pass options that may conflict with this CLI.
       }
     }
 
-    const selectedProvider = await prompt(
-      `Enter provider (${VALID_PROVIDERS.join(", ")})`,
-      {
-        default: configSaved["provider"] || "openai",
-      },
-    );
+    // TODO use select
+    const selectedProvider = await input({
+      label: `Enter provider (${VALID_PROVIDERS.join(", ")})`,
+      defaultValue: configSaved["provider"],
+      type: "text",
+    });
 
     const providerConfigToEdit = configSaved.providers[selectedProvider] || {
       "api-key": "",
@@ -386,7 +394,8 @@ Use -- to pass options that may conflict with this CLI.
       "base-URL": "",
     };
 
-    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel || "";
+    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel ||
+      "";
     const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
 
     const selectedProviderConfig = PROVIDERS[selectedProvider];
@@ -397,48 +406,58 @@ Use -- to pass options that may conflict with this CLI.
 
     const newProviderConfig = {
       "api-key": requiresApiKey
-        ? await prompt(
-            `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
-            {
-              default: providerConfigToEdit["api-key"],
-              mask: true,
-            },
-          )
+        ? await inputPrompt(
+          `Enter API key for ${selectedProvider}${
+            providerEnvVar
+              ? ` or leave empty to read from ${providerEnvVar}`
+              : ""
+          }`,
+          {
+            default: providerConfigToEdit["api-key"],
+            mask: true,
+          },
+        )
         : providerConfigToEdit["api-key"],
-      model: await prompt(
+      model: await inputPrompt(
         `Enter model for ${selectedProvider} (leave empty to use provider default, currently: ${providerDefaultModel})`,
         {
           default: providerConfigToEdit["model"],
         },
       ),
       "base-URL": requiresBaseUrl
-        ? await prompt(
-            `Enter base URL for ${selectedProvider}${providerBaseURLEnvVar ? ` or leave empty to read from ${providerBaseURLEnvVar}` : ""}`,
-            {
-              default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
-            },
-          )
+        ? await inputPrompt(
+          `Enter base URL for ${selectedProvider}${
+            providerBaseURLEnvVar
+              ? ` or leave empty to read from ${providerBaseURLEnvVar}`
+              : ""
+          }`,
+          {
+            default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
+          },
+        )
         : providerConfigToEdit["base-URL"],
     };
 
     const newConfig = {
       provider: selectedProvider,
       "max-words": Number(
-        await prompt("Enter max-words", { default: configSaved["max-words"] }),
+        await inputPrompt("Enter max-words", {
+          default: String(configSaved["max-words"]),
+        }),
       ),
       "commits-to-learn": Number(
-        await prompt("Enter commits-to-learn", {
-          default: configSaved["commits-to-learn"],
+        await inputPrompt("Enter commits-to-learn", {
+          default: String(configSaved["commits-to-learn"]),
         }),
       ),
       unified: Number(
-        await prompt("Enter unified (lines of context in diff)", {
-          default: configSaved["unified"],
+        await inputPrompt("Enter unified (lines of context in diff)", {
+          default: String(configSaved["unified"]),
         }),
       ),
-      debug:
-        (await prompt("Enter debug", { default: configSaved["debug"] })) ===
-        "true",
+      debug: (await inputPrompt("Enter debug", {
+        default: String(configSaved["debug"]),
+      })) === "true",
       providers: {
         ...configSaved.providers,
         [selectedProvider]: newProviderConfig,
@@ -453,18 +472,23 @@ Use -- to pass options that may conflict with this CLI.
 
   let finalApiKey = apiKey;
   if (!finalApiKey && provider.requiresApiKey) {
-    finalApiKey = await $.prompt(
-      `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
+    finalApiKey = await input(
       {
-        mask: true,
+        label:
+          `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
+        type: "password",
       },
     );
   }
 
   let finalBaseURL = baseURL;
   if (!finalBaseURL && provider.requiresBaseUrl) {
-    finalBaseURL = await $.prompt(
-      `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
+    finalBaseURL = await input(
+      {
+        label:
+          `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
+        type: "text",
+      },
     );
   }
 
@@ -481,7 +505,9 @@ Use -- to pass options that may conflict with this CLI.
   }
   console.info(
     colors.gray(
-    `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
+      `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${
+        colors.blue(model)
+      }, API key source: ${colors.blue(readApiKeyFrom)}`,
     ),
   );
   debug &&
@@ -543,7 +569,8 @@ Use -- to pass options that may conflict with this CLI.
     Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
     `;
   if (commits) {
-    systemContent += `\nYou should follow the commit style of these commits:\n${commits}`;
+    systemContent +=
+      `\nYou should follow the commit style of these commits:\n${commits}`;
   }
 
   let commitMessage = "";
@@ -583,9 +610,10 @@ Use -- to pass options that may conflict with this CLI.
     if (action === 0) {
       break;
     } else if (action === 1) {
-      commitMessage = await Input.prompt({
-        message: "Edit commit message",
-        default: commitMessage,
+      commitMessage = await input({
+        label: "Edit commit message",
+        defaultValue: commitMessage,
+        type: "text",
       });
       if (!commitMessage) {
         console.error("No commitMessage");
@@ -619,16 +647,6 @@ Use -- to pass options that may conflict with this CLI.
 
 if (import.meta.main) {
   await commit();
-}
-
-async function prompt(
-  message: string,
-  options: { default?: string; mask?: boolean; noClear?: boolean } = {},
-): Promise<string> {
-  options.noClear = true;
-  options.default = String(options.default);
-  const result = await $.prompt(`${message}`, options);
-  return String(result).trim();
 }
 
 async function generateCommitMessage(opts: {

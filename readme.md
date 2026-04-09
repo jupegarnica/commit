@@ -45,8 +45,8 @@ commit [OPTIONS]
   default model.
 - `--config`: Prompts for the default options and saves them.
 - `--api-key <apiKey>`: Specifies the API key to use. Overrides the provider's
-  environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`,
-  `ANTHROPIC_API_KEY`, `OLLAMA_API_KEY`, etc.).
+  environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`,
+  `OLLAMA_API_KEY`, etc.).
 - `--max-words <maxWords>`: Specifies the maximum number of words to send to the
   API. The default is 6000. Useful to avoid extra charges.
 - `--base-URL <baseURL>`: Specifies a custom base URL for the provider API.
@@ -57,22 +57,22 @@ commit [OPTIONS]
 - `--help`: Prints the help message.
 - `--version`: Prints the version number.
 
-Any extra options not recognized by this CLI are forwarded to `git commit`.
-If an option conflicts with this CLI, pass it after `--`.
+Any extra options not recognized by this CLI are forwarded to `git commit`. If
+an option conflicts with this CLI, pass it after `--`.
 
 ### Providers
 
-| Provider       | Default model              | API key env var     | Base URL env var   |
-| -------------- | -------------------------- | ------------------- | ------------------ |
-| `openai`       | `gpt-5-nano`               | `OPENAI_API_KEY`    |                    |
-| `google`       | `gemini-2.0-flash`         | `GEMINI_API_KEY`    |                    |
-| `ollama`       | `llama3`                   | *(not required)*    | `OLLAMA_BASE_URL`  |
-| `ollama-cloud` | `kimi-k2.5:cloud`          | `OLLAMA_API_KEY`    |                    |
-| `anthropic`    | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |                    |
+| Provider       | Default model              | API key env var     | Base URL env var  |
+| -------------- | -------------------------- | ------------------- | ----------------- |
+| `openai`       | `gpt-5-nano`               | `OPENAI_API_KEY`    |                   |
+| `google`       | `gemini-2.0-flash`         | `GEMINI_API_KEY`    |                   |
+| `ollama`       | `llama3`                   | _(not required)_    | `OLLAMA_BASE_URL` |
+| `ollama-cloud` | `kimi-k2.5:cloud`          | `OLLAMA_API_KEY`    |                   |
+| `anthropic`    | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |                   |
 
 The `ollama` provider requires a base URL (your local Ollama instance). It is
-read from `OLLAMA_BASE_URL`, `--base-URL`, a saved `--config` value, or
-prompted interactively if none are found.
+read from `OLLAMA_BASE_URL`, `--base-URL`, a saved `--config` value, or prompted
+interactively if none are found.
 
 The `ollama-cloud` provider requires an API key read from `OLLAMA_API_KEY`,
 `--api-key`, or a saved `--config` value.
@@ -87,7 +87,8 @@ still used for providers that require it (e.g. `ollama`).
 - `GEMINI_API_KEY`: API key for the Google provider.
 - `ANTHROPIC_API_KEY`: API key for the Anthropic provider.
 - `OLLAMA_API_KEY`: API key for the `ollama-cloud` provider.
-- `OLLAMA_BASE_URL`: Base URL for the local `ollama` provider (e.g. `http://localhost:11434/v1`).
+- `OLLAMA_BASE_URL`: Base URL for the local `ollama` provider (e.g.
+  `http://localhost:11434/v1`).
 
 ## Example
 
