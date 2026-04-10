@@ -31,7 +31,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
         sdk: "ollama",
     },
     "ollama-cloud": {
-        defaultModel: "kimi-k2.5:cloud",
+        defaultModel: "gpt-oss:20b-cloud",
         envVar: "OLLAMA_API_KEY",
         requiresApiKey: true,
         baseURL: "https://ollama.com",
