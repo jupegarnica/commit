@@ -1,6 +1,5 @@
 import $ from "jsr:@david/dax@0.42.0";
 import * as colors from "jsr:/@std/fmt@1/colors";
-import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
@@ -271,19 +270,15 @@ export async function commit(): Promise<void> {
   const debug = args.debug || configSaved.debug;
 
   // Provider resolution
-  let providerName: string =
-    args.provider || configSaved.provider || "openai";
+  let providerName: string = args.provider || configSaved.provider || "openai";
   if (!VALID_PROVIDERS.includes(providerName)) {
-    providerName = 'openai';
+    providerName = "openai";
   }
   const provider = PROVIDERS[providerName];
 
   const providerConfig = configSaved.providers[providerName] || {};
 
-  let model =
-    args.model ||
-    providerConfig.model ||
-    provider.defaultModel;
+  let model = args.model || providerConfig.model || provider.defaultModel;
 
   let baseURL: string | undefined =
     args["base-URL"] ||
@@ -350,8 +345,6 @@ Use -- to pass options that may conflict with this CLI.
         ? `env var ${provider.envVar}`
         : "(no API)";
 
-
-
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
     const configChanged = Object.keys(configSaved).some(
@@ -384,7 +377,8 @@ Use -- to pass options that may conflict with this CLI.
       "base-URL": "",
     };
 
-    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel || "";
+    const providerDefaultModel =
+      PROVIDERS[selectedProvider]?.defaultModel || "";
     const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
 
     const selectedProviderConfig = PROVIDERS[selectedProvider];
@@ -413,7 +407,8 @@ Use -- to pass options that may conflict with this CLI.
         ? await prompt(
             `Enter base URL for ${selectedProvider}${providerBaseURLEnvVar ? ` or leave empty to read from ${providerBaseURLEnvVar}` : ""}`,
             {
-              default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
+              default:
+                providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
             },
           )
         : providerConfigToEdit["base-URL"],
@@ -482,7 +477,7 @@ Use -- to pass options that may conflict with this CLI.
   }
   console.info(
     colors.gray(
-    `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
+      `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
     ),
   );
   debug &&
@@ -584,9 +579,11 @@ Use -- to pass options that may conflict with this CLI.
     if (action === 0) {
       break;
     } else if (action === 1) {
-      commitMessage = await Input.prompt({
-        message: "Edit commit message",
-        default: commitMessage,
+      commitMessage = await renderPrompt({
+        question: "Edit commit message",
+        defaultValue: commitMessage,
+        type: "textarea",
+
       });
       if (!commitMessage) {
         console.error("No commitMessage");
