@@ -4,6 +4,7 @@ import { Input } from "jsr:@cliffy/prompt@1.0.0";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
+import { prompt as renderPrompt } from "./ui/prompt.tsx";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -398,7 +399,7 @@ Use -- to pass options that may conflict with this CLI.
             `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
             {
               default: providerConfigToEdit["api-key"],
-              mask: true,
+              type: "password",
             },
           )
         : providerConfigToEdit["api-key"],
@@ -450,18 +451,21 @@ Use -- to pass options that may conflict with this CLI.
 
   let finalApiKey = apiKey;
   if (!finalApiKey && provider.requiresApiKey) {
-    finalApiKey = await $.prompt(
+    finalApiKey = await prompt(
       `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
       {
-        mask: true,
+        type: "password",
       },
     );
   }
 
   let finalBaseURL = baseURL;
   if (!finalBaseURL && provider.requiresBaseUrl) {
-    finalBaseURL = await $.prompt(
+    finalBaseURL = await prompt(
       `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
+      {
+        type: "input",
+      },
     );
   }
 
@@ -620,11 +624,16 @@ if (import.meta.main) {
 
 async function prompt(
   message: string,
-  options: { default?: string; mask?: boolean; noClear?: boolean } = {},
+  options: {
+    default?: string | number | boolean;
+    type?: "input" | "password" | "textarea";
+  } = {},
 ): Promise<string> {
-  options.noClear = true;
-  options.default = String(options.default);
-  const result = await $.prompt(`${message}`, options);
+  const result = await renderPrompt({
+    question: message,
+    defaultValue: options.default == null ? "" : String(options.default),
+    type: options.type ?? "input",
+  });
   return String(result).trim();
 }
 

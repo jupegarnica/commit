@@ -15,7 +15,7 @@
   "exports": "./commit.ts",
   "license": "MIT",
   "imports": {
-    "@garn/ink-html": "jsr:@garn/ink-html@^0.0.3",
+    "@garn/ink-html": "jsr:@garn/ink-html@^0.0.4",
     "ink": "npm:ink@^7.0.0",
     "react": "npm:react@^19.2.4"
   }
