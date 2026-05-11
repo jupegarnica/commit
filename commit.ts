@@ -3,7 +3,7 @@ import * as colors from "jsr:/@std/fmt@1/colors";
 import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
-import { prompt as renderPrompt } from "./ui/prompt.tsx";
+import { confirmCommit } from "./ui/prompt.tsx";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -566,27 +566,19 @@ Use -- to pass options that may conflict with this CLI.
       break;
     }
 
-    console.log(`\n${commitMessage}\n`);
-
-    const action = await $.select({
-      message: "What would you like to do?",
-      options: ["Confirm", "Edit", "Retry (regenerate)", "Reject (abort)"],
+    const confirmation = await confirmCommit({
+      question: "Review commit message",
+      defaultValue: commitMessage,
     });
 
-    if (action === 0) {
-      break;
-    } else if (action === 1) {
-      commitMessage = await renderPrompt({
-        question: "Edit commit message",
-        defaultValue: commitMessage,
-        type: "textarea",
-      });
+    if (confirmation.action === "commit") {
+      commitMessage = confirmation.value.trim();
       if (!commitMessage) {
         console.error("No commitMessage");
         Deno.exit(1);
       }
       break;
-    } else if (action === 2) {
+    } else if (confirmation.action === "regenerate") {
       continue;
     } else {
       console.info("Commit aborted.");

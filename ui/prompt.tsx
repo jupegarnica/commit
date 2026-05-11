@@ -1,6 +1,35 @@
 import React from "react";
 import { useApp, render } from "ink";
-import { Textarea, Form, Label, Input, Button } from "@garn/ink-html";
+import { Textarea, Form, Label, Input, Button, Div } from "@garn/ink-html";
+
+type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
+
+type ConfirmCommitResult = {
+    action: ConfirmCommitAction;
+    value: string;
+};
+
+async function renderPrompt<T>(node: React.ReactElement, fallbackValue: T, result: { value: T }) {
+    const { waitUntilExit, clear } = render(node);
+    const code = await waitUntilExit();
+    clear();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (code !== 0) {
+        return fallbackValue;
+    }
+
+    return result.value;
+}
+
+async function renderCommittedPrompt<T>(node: React.ReactElement, result: { value: T }) {
+    const { waitUntilExit, clear } = render(node);
+    await waitUntilExit();
+    clear();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    return result.value;
+}
 
 export async function prompt({
     question,
@@ -15,7 +44,7 @@ export async function prompt({
 }) {
     const result = { value: "" };
     if (type === "input" || type === "password") {
-        const { waitUntilExit, clear } = render(
+        return await renderPrompt(
             <InputPrompt
                 label={question}
                 placeholder={placeholder}
@@ -25,17 +54,11 @@ export async function prompt({
                 defaultValue={defaultValue}
                 type={type}
             />,
+            defaultValue,
+            result,
         );
-
-        const code = await waitUntilExit();
-        clear();
-        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for the UI to clear before returning the result
-        if (code !== 0) {
-            return defaultValue;
-        }
-        return result.value;
     } else if (type === "textarea") {
-        const { waitUntilExit, clear } = render(
+        return await renderPrompt(
             <TextareaPrompt
                 label={question}
                 placeholder={placeholder}
@@ -44,17 +67,37 @@ export async function prompt({
                 }}
                 defaultValue={defaultValue}
             />,
+            defaultValue,
+            result,
         );
-
-        const code = await waitUntilExit();
-        clear();
-        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for the UI to clear before returning the result
-        if (code !== 0) {
-            return defaultValue;
-        }
-        return result.value;
     }
     throw new Error(`Unsupported prompt type: ${type}`);
+}
+
+export async function confirmCommit({
+    question,
+    defaultValue = "",
+}: {
+    question: string;
+    defaultValue?: string;
+}): Promise<ConfirmCommitResult> {
+    const result = {
+        value: {
+            action: "cancel" as ConfirmCommitAction,
+            value: defaultValue,
+        },
+    };
+
+    return await renderCommittedPrompt(
+        <ConfirmCommitPrompt
+            label={question}
+            defaultValue={defaultValue}
+            onSubmit={(value) => {
+                result.value = value;
+            }}
+        />,
+        result,
+    );
 }
 
 function TextareaPrompt({
@@ -114,6 +157,74 @@ function TextareaPrompt({
             >
                 Submit
             </Button>
+        </Form>
+    );
+}
+
+function ConfirmCommitPrompt({
+    label,
+    defaultValue,
+    onSubmit,
+}: {
+    label: string;
+    defaultValue: string;
+    onSubmit: (value: ConfirmCommitResult) => void;
+}) {
+    const { exit } = useApp();
+    const [value, setValue] = React.useState(defaultValue);
+    const inputId = React.useId();
+
+    const submit = (action: ConfirmCommitAction) => {
+        onSubmit({ action, value });
+        setTimeout(() => {
+            exit();
+        }, 100);
+    };
+
+    return (
+        <Form style={{ flexDirection: "column", gap: 0 }}>
+            {label && <Label>{label}</Label>}
+            <Textarea
+                id={inputId}
+                tabIndex={0}
+                hidden={false}
+                children=""
+                style={{
+                    width: "100%",
+                    minHeight: 5,
+                    borderLeftStyle: "none",
+                    borderRightStyle: "none",
+                }}
+                autoFocus
+                value={value}
+                onChange={(e: any) => setValue(e.target.value)}
+            ></Textarea>
+            <Div style={{ flexDirection: "row", gap: 1 }}>
+                <Button
+                    id={`${inputId}-commit`}
+                    tabIndex={0}
+                    hidden={false}
+                    onClick={() => submit("commit")}
+                >
+                    Commit
+                </Button>
+                <Button
+                    id={`${inputId}-regenerate`}
+                    tabIndex={0}
+                    hidden={false}
+                    onClick={() => submit("regenerate")}
+                >
+                    Regenerate
+                </Button>
+                <Button
+                    id={`${inputId}-cancel`}
+                    tabIndex={0}
+                    hidden={false}
+                    onClick={() => submit("cancel")}
+                >
+                    Cancel
+                </Button>
+            </Div>
         </Form>
     );
 }
