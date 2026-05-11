@@ -191,7 +191,7 @@ function ConfirmCommitPrompt({
                 children=""
                 style={{
                     width: "100%",
-                    minHeight: 5,
+                    // minHeight: 5,
                     borderLeftStyle: "none",
                     borderRightStyle: "none",
                 }}
