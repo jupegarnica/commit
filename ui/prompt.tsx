@@ -195,13 +195,13 @@ function ConfirmCommitPrompt({
                     borderLeftStyle: "none",
                     borderRightStyle: "none",
                 }}
-                autoFocus
                 value={value}
                 onChange={(e: any) => setValue(e.target.value)}
             ></Textarea>
             <Div style={{ flexDirection: "row", gap: 1 }}>
                 <Button
                     id={`${inputId}-commit`}
+                    autoFocus
                     tabIndex={0}
                     hidden={false}
                     onClick={() => submit("commit")}

@@ -540,6 +540,10 @@ Use -- to pass options that may conflict with this CLI.
   }
 
   let commitMessage = "";
+  const stagedDiffStat = (
+    await daxSilent`git diff --color=always --stat --staged -- . ':(exclude)*.lock'`
+  );
+  let hasShownStagedDiffStat = false;
 
   while (true) {
     commitMessage = await generateCommitMessage({
@@ -566,8 +570,13 @@ Use -- to pass options that may conflict with this CLI.
       break;
     }
 
+    if (stagedDiffStat && !hasShownStagedDiffStat) {
+      console.info((stagedDiffStat));
+      hasShownStagedDiffStat = true;
+    }
+
     const confirmation = await confirmCommit({
-      question: "Review commit message",
+      question: "Review commit message:",
       defaultValue: commitMessage,
     });
 
