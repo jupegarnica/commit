@@ -1,5 +1,5 @@
 import React from "react";
-import { useApp, render } from "ink";
+import { Box, useApp, useBoxMetrics, render } from "ink";
 import { Textarea, Form, Label, Input, Button, Div } from "@garn/ink-html";
 
 type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
@@ -8,6 +8,36 @@ type ConfirmCommitResult = {
     action: ConfirmCommitAction;
     value: string;
 };
+
+const DEFAULT_TEXTAREA_WIDTH = 40;
+const DEFAULT_TEXTAREA_MIN_ROWS = 1;
+const DEFAULT_TEXTAREA_MAX_ROWS = 12;
+
+function clamp(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function countWrappedRows(value: string, width: number) {
+    const safeWidth = Math.max(1, width);
+    const lines = value.length > 0 ? value.split("\n") : [""];
+
+    return lines.reduce((total, line) => {
+        const lineLength = Math.max(1, line.length);
+        return total + Math.ceil(lineLength / safeWidth);
+    }, 0);
+}
+
+function useAutoGrowingTextareaRows(
+    value: string,
+    { minRows = DEFAULT_TEXTAREA_MIN_ROWS, maxRows = DEFAULT_TEXTAREA_MAX_ROWS } = {},
+) {
+    const ref = React.useRef<any>(null);
+    const { width, hasMeasured } = useBoxMetrics(ref);
+    const measuredWidth = hasMeasured ? width : DEFAULT_TEXTAREA_WIDTH;
+    const rows = clamp(countWrappedRows(value, measuredWidth), minRows, maxRows);
+
+    return { ref, rows };
+}
 
 async function renderPrompt<T>(node: React.ReactElement, fallbackValue: T, result: { value: T }) {
     const { waitUntilExit, clear } = render(node);
@@ -114,6 +144,7 @@ function TextareaPrompt({
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
     const inputId = React.useId();
+    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 3 });
 
     return (
         <Form
@@ -124,27 +155,30 @@ function TextareaPrompt({
             style={{ flexDirection: "column" }}
         >
             {label && <Label>{label}</Label>}
-            <Textarea
-                id={inputId}
-                tabIndex={0}
-                hidden={false}
-                children=""
-                style={{
-                    width: "100%",
-                    borderLeftStyle: "none",
-                    borderRightStyle: "none",
-                }}
-                autoFocus
-                placeholder={placeholder}
-                value={value}
-                onChange={(e: any) => setValue(e.target.value)}
-                onKeyDown={(e: any) => {
-                    if (e.key === "Enter") {
-                        onSubmit(value);
-                        exit();
-                    }
-                }}
-            ></Textarea>
+            <Box ref={ref} width="100%">
+                <Textarea
+                    id={inputId}
+                    tabIndex={0}
+                    hidden={false}
+                    children=""
+                    rows={rows}
+                    style={{
+                        width: "100%",
+                        borderLeftStyle: "none",
+                        borderRightStyle: "none",
+                    }}
+                    autoFocus
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e: any) => setValue(e.target.value)}
+                    onKeyDown={(e: any) => {
+                        if (e.key === "Enter") {
+                            onSubmit(value);
+                            exit();
+                        }
+                    }}
+                ></Textarea>
+            </Box>
             <Button
                 id={`${inputId}-submit`}
                 tabIndex={0}
@@ -173,6 +207,7 @@ function ConfirmCommitPrompt({
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
     const inputId = React.useId();
+    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 3, maxRows: 16 });
 
     const submit = (action: ConfirmCommitAction) => {
         onSubmit({ action, value });
@@ -184,21 +219,30 @@ function ConfirmCommitPrompt({
     return (
         <Form style={{ flexDirection: "column", gap: 0 }}>
             {label && <Label>{label}</Label>}
-            <Textarea
-                id={inputId}
-                tabIndex={0}
+            <Box ref={ref} width="100%">
+                <Textarea
+                    id={inputId}
+                    tabIndex={0}
+                    hidden={false}
+                    autoFocus={false}
+                    children=""
+                    rows={rows}
+                    style={{
+                        width: "100%",
+                        borderLeftStyle: "none",
+                        borderRightStyle: "none",
+                    }}
+                    value={value}
+                    onChange={(e: any) => setValue(e.target.value)}
+                ></Textarea>
+            </Box>
+            <Div
+                id={`${inputId}-actions`}
+                tabIndex={-1}
                 hidden={false}
-                children=""
-                style={{
-                    width: "100%",
-                    // minHeight: 5,
-                    borderLeftStyle: "none",
-                    borderRightStyle: "none",
-                }}
-                value={value}
-                onChange={(e: any) => setValue(e.target.value)}
-            ></Textarea>
-            <Div style={{ flexDirection: "row", gap: 1 }}>
+                autoFocus={false}
+                style={{ flexDirection: "row", gap: 1 }}
+            >
                 <Button
                     id={`${inputId}-commit`}
                     autoFocus
@@ -212,6 +256,7 @@ function ConfirmCommitPrompt({
                     id={`${inputId}-regenerate`}
                     tabIndex={0}
                     hidden={false}
+                    autoFocus={false}
                     onClick={() => submit("regenerate")}
                 >
                     Regenerate
@@ -220,6 +265,7 @@ function ConfirmCommitPrompt({
                     id={`${inputId}-cancel`}
                     tabIndex={0}
                     hidden={false}
+                    autoFocus={false}
                     onClick={() => submit("cancel")}
                 >
                     Cancel
