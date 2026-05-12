@@ -144,7 +144,7 @@ function TextareaPrompt({
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
     const inputId = React.useId();
-    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 3 });
+    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1 });
 
     return (
         <Form
@@ -206,10 +206,12 @@ function ConfirmCommitPrompt({
 }) {
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
     const inputId = React.useId();
     const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 3, maxRows: 16 });
 
     const submit = (action: ConfirmCommitAction) => {
+        setIsSubmitting(true);
         onSubmit({ action, value });
         setTimeout(() => {
             exit();
@@ -222,7 +224,7 @@ function ConfirmCommitPrompt({
             <Box ref={ref} width="100%">
                 <Textarea
                     id={inputId}
-                    tabIndex={0}
+                    tabIndex={isSubmitting ? -1 : 0}
                     hidden={false}
                     autoFocus={false}
                     children=""
@@ -236,41 +238,43 @@ function ConfirmCommitPrompt({
                     onChange={(e: any) => setValue(e.target.value)}
                 ></Textarea>
             </Box>
-            <Div
-                id={`${inputId}-actions`}
-                tabIndex={-1}
-                hidden={false}
-                autoFocus={false}
-                style={{ flexDirection: "row", gap: 1 }}
-            >
-                <Button
-                    id={`${inputId}-commit`}
-                    autoFocus
-                    tabIndex={0}
-                    hidden={false}
-                    onClick={() => submit("commit")}
-                >
-                    Commit
-                </Button>
-                <Button
-                    id={`${inputId}-regenerate`}
-                    tabIndex={0}
+            {!isSubmitting && (
+                <Div
+                    id={`${inputId}-actions`}
+                    tabIndex={-1}
                     hidden={false}
                     autoFocus={false}
-                    onClick={() => submit("regenerate")}
+                    style={{ flexDirection: "row", gap: 1 }}
                 >
-                    Regenerate
-                </Button>
-                <Button
-                    id={`${inputId}-cancel`}
-                    tabIndex={0}
-                    hidden={false}
-                    autoFocus={false}
-                    onClick={() => submit("cancel")}
-                >
-                    Cancel
-                </Button>
-            </Div>
+                    <Button
+                        id={`${inputId}-commit`}
+                        autoFocus
+                        tabIndex={0}
+                        hidden={false}
+                        onClick={() => submit("commit")}
+                    >
+                        Commit
+                    </Button>
+                    <Button
+                        id={`${inputId}-regenerate`}
+                        tabIndex={0}
+                        hidden={false}
+                        autoFocus={false}
+                        onClick={() => submit("regenerate")}
+                    >
+                        Regenerate
+                    </Button>
+                    <Button
+                        id={`${inputId}-cancel`}
+                        tabIndex={0}
+                        hidden={false}
+                        autoFocus={false}
+                        onClick={() => submit("cancel")}
+                    >
+                        Cancel
+                    </Button>
+                </Div>
+            )}
         </Form>
     );
 }
