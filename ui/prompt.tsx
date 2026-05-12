@@ -208,7 +208,7 @@ function ConfirmCommitPrompt({
     const [value, setValue] = React.useState(defaultValue);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const inputId = React.useId();
-    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 3, maxRows: 16 });
+    const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1, maxRows: 16 });
 
     const submit = (action: ConfirmCommitAction) => {
         setIsSubmitting(true);
