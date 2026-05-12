@@ -1,7 +1,7 @@
 {
   "lock": false,
   "tasks": {
-    "i:jsr": "deno install --config deno.json -A -grfn commit  jsr:@garn/commit",
+    "i:jsr": "deno install --no-config -A -grfn commit  jsr:@garn/commit",
     "i": "deno install --config deno.json -gA -fn commit  commit.ts",
     "i:gpt": "deno install --config deno.json -gA -fn gpt  gpt.ts",
     "dev": "deno run -A commit.ts",
