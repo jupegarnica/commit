@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, useApp, useBoxMetrics, render } from "ink";
-import { Textarea, Form, Label, Input, Button, Div } from "@garn/ink-html";
+import { Textarea, Form, Label, Input, Button, Div, Html, Body } from "@garn/ink-html";
 
 type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
 
@@ -147,51 +147,58 @@ function TextareaPrompt({
     const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1 });
 
     return (
-        <Form
-            onSubmit={() => {
-                onSubmit(value);
-                exit();
-            }}
-            style={{ flexDirection: "column" }}
-        >
-            {label && <Label>{label}</Label>}
-            <Box ref={ref} width="100%">
-                <Textarea
-                    id={inputId}
-                    tabIndex={0}
-                    hidden={false}
-                    children=""
-                    rows={rows}
-                    style={{
-                        width: "100%",
-                        borderLeftStyle: "none",
-                        borderRightStyle: "none",
+        <Html>
+            <Body>
+
+                <Form
+                    onSubmit={() => {
+                        onSubmit(value);
+                        exit();
                     }}
-                    autoFocus
-                    placeholder={placeholder}
-                    value={value}
-                    onChange={(e: any) => setValue(e.target.value)}
-                    onKeyDown={(e: any) => {
-                        if (e.key === "Enter") {
+                    style={{ flexDirection: "column" }}
+                >
+                    {label && <Label>{label}</Label>}
+                    <Box ref={ref} width="100%">
+                        <Textarea
+                            id={inputId}
+                            tabIndex={0}
+                            hidden={false}
+                            children=""
+                            rows={rows}
+                            style={{
+                                width: "100%",
+                                borderLeftStyle: "none",
+                                borderRightStyle: "none",
+                            }}
+                            autoFocus
+                            placeholder={placeholder}
+                            value={value}
+                            onChange={(e: any) => setValue(e.target.value)}
+                            onKeyDown={(e: any) => {
+                                if (e.key === "Enter") {
+                                    onSubmit(value);
+                                    exit();
+                                }
+                            }}
+                        ></Textarea>
+                    </Box>
+                    <Button
+                        id={`${inputId}-submit`}
+                        tabIndex={0}
+                        hidden={false}
+                        autoFocus={false}
+                        onClick={() => {
                             onSubmit(value);
                             exit();
-                        }
-                    }}
-                ></Textarea>
-            </Box>
-            <Button
-                id={`${inputId}-submit`}
-                tabIndex={0}
-                hidden={false}
-                autoFocus={false}
-                onClick={() => {
-                    onSubmit(value);
-                    exit();
-                }}
-            >
-                Submit
-            </Button>
-        </Form>
+                        }}
+                    >
+                        Submit
+                    </Button>
+                </Form>
+            </Body>
+
+        </Html>
+
     );
 }
 
