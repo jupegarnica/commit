@@ -147,57 +147,52 @@ function TextareaPrompt({
     const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1 });
 
     return (
-        <Html>
-            <Body>
 
-                <Form
-                    onSubmit={() => {
-                        onSubmit(value);
-                        exit();
+        <Form
+            onSubmit={() => {
+                onSubmit(value);
+                exit();
+            }}
+            style={{ flexDirection: "column" }}
+        >
+            {label && <Label>{label}</Label>}
+            <Box ref={ref} width="100%">
+                <Textarea
+                    id={inputId}
+                    tabIndex={0}
+                    hidden={false}
+                    children=""
+                    rows={rows}
+                    style={{
+                        width: "100%",
+                        borderLeftStyle: "none",
+                        borderRightStyle: "none",
                     }}
-                    style={{ flexDirection: "column" }}
-                >
-                    {label && <Label>{label}</Label>}
-                    <Box ref={ref} width="100%">
-                        <Textarea
-                            id={inputId}
-                            tabIndex={0}
-                            hidden={false}
-                            children=""
-                            rows={rows}
-                            style={{
-                                width: "100%",
-                                borderLeftStyle: "none",
-                                borderRightStyle: "none",
-                            }}
-                            autoFocus
-                            placeholder={placeholder}
-                            value={value}
-                            onChange={(e: any) => setValue(e.target.value)}
-                            onKeyDown={(e: any) => {
-                                if (e.key === "Enter") {
-                                    onSubmit(value);
-                                    exit();
-                                }
-                            }}
-                        ></Textarea>
-                    </Box>
-                    <Button
-                        id={`${inputId}-submit`}
-                        tabIndex={0}
-                        hidden={false}
-                        autoFocus={false}
-                        onClick={() => {
+                    autoFocus
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e: any) => setValue(e.target.value)}
+                    onKeyDown={(e: any) => {
+                        if (e.key === "Enter") {
                             onSubmit(value);
                             exit();
-                        }}
-                    >
-                        Submit
-                    </Button>
-                </Form>
-            </Body>
-
-        </Html>
+                        }
+                    }}
+                ></Textarea>
+            </Box>
+            <Button
+                id={`${inputId}-submit`}
+                tabIndex={0}
+                hidden={false}
+                autoFocus={false}
+                onClick={() => {
+                    onSubmit(value);
+                    exit();
+                }}
+            >
+                Submit
+            </Button>
+        </Form>
 
     );
 }
