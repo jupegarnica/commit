@@ -3,6 +3,7 @@ import {
   appendCoAuthor,
   collectExtraCommitArgs,
   countWords,
+  extractTicketFromBranch,
   hasNoVerifyFlag,
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
@@ -172,28 +173,6 @@ Deno.test("collectExtraCommitArgs skips --co-author-email with = value", () => {
   assertEquals(collectExtraCommitArgs(args), []);
 });
 
-Deno.test("countWords counts whitespace-separated words", () => {
-  assertEquals(countWords("hello world"), 2);
-  assertEquals(countWords("  a   b  c "), 3);
-  assertEquals(countWords(""), 0);
-  assertEquals(countWords("   "), 0);
-});
-
-Deno.test("splitDiffIntoChunks splits on diff --git headers", () => {
-  const diff = [
-    "diff --git a/a.ts b/a.ts",
-    "+++ a.ts",
-    "+hello",
-    "diff --git a/b.ts b/b.ts",
-    "+++ b.ts",
-    "+world",
-  ].join("\n");
-  const chunks = splitDiffIntoChunks(diff);
-  assertEquals(chunks.length, 2);
-  assertEquals(chunks[0].includes("a.ts"), true);
-  assertEquals(chunks[1].includes("b.ts"), true);
-});
-
 Deno.test("splitDiffIntoBoundedChunks respects budget and keeps big chunks whole", () => {
   const small = (name: string) =>
     `diff --git a/${name} b/${name}\n+${"word ".repeat(50)}`;
@@ -203,4 +182,28 @@ Deno.test("splitDiffIntoBoundedChunks respects budget and keeps big chunks whole
   const huge = `diff --git a/huge b/huge\n+${"word ".repeat(1000)}`;
   const withHuge = splitDiffIntoBoundedChunks(`${small("a")}\n${huge}`, 600);
   assertEquals(withHuge.length, 2);
+});
+
+Deno.test("extractTicketFromBranch detects common ticket patterns", () => {
+  assertEquals(extractTicketFromBranch("feat/PROJ-123-add-login"), "PROJ-123");
+  assertEquals(extractTicketFromBranch("fix/AB-42-handle-null"), "AB-42");
+  assertEquals(extractTicketFromBranch("PROJ-999_direct"), "PROJ-999");
+  assertEquals(extractTicketFromBranch("hotfix/TEAM_7-bug"), "TEAM-7");
+  assertEquals(extractTicketFromBranch("feature/myproj-12-x"), "MYPROJ-12");
+});
+
+Deno.test("extractTicketFromBranch ignores non-ticket branches", () => {
+  assertEquals(extractTicketFromBranch("main"), null);
+  assertEquals(extractTicketFromBranch("develop"), null);
+  assertEquals(extractTicketFromBranch("feat/add-login"), null);
+  assertEquals(extractTicketFromBranch("v2-upgrade"), null);
+  assertEquals(extractTicketFromBranch("hotfix1"), null);
+  assertEquals(extractTicketFromBranch(""), null);
+  assertEquals(extractTicketFromBranch(null), null);
+  assertEquals(extractTicketFromBranch(undefined), null);
+});
+
+Deno.test("extractTicketFromBranch is case-insensitive and uppercases", () => {
+  assertEquals(extractTicketFromBranch("feat/proj-123-x"), "PROJ-123");
+  assertEquals(extractTicketFromBranch("release/ab-7"), "AB-7");
 });

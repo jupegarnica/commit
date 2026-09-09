@@ -207,7 +207,24 @@ async function runCommand(command: string, args: string[]) {
   }
 }
 
-export async function commit(): Promise<void> {
+export function extractTicketFromBranch(
+  branch: string | null | undefined,
+): string | null {
+  if (!branch) {
+    return null;
+  }
+  const match = branch.match(
+    /(?:^|[\/._-])((?:[A-Za-z]{2,10})[-_]?\d{1,6})(?:$|[^0-9a-z])/i,
+  );
+  if (!match) {
+    return null;
+  }
+  const ticket = match[1].replace("_", "-").toUpperCase();
+  // Require a letter prefix of at least 2 chars and a number: avoids matching words like "v2" or "hotfix1".
+  return /^[A-Z]{2,10}-\d{1,6}$/.test(ticket) ? ticket : null;
+}
+
+async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
     ? Deno.args
@@ -620,6 +637,23 @@ Use -- to pass options that may conflict with this CLI.
   if (commits) {
     systemContent +=
       `\nYou should follow the commit style of these commits:\n${commits}`;
+  }
+
+  let branchName = "";
+  try {
+    branchName = await $`git rev-parse --abbrev-ref HEAD`.text();
+  } catch (_error) {
+    branchName = "";
+  }
+  const ticket = extractTicketFromBranch(branchName.trim());
+  if (ticket) {
+    systemContent +=
+      `\nThis work relates to ticket ${ticket} (inferred from the git branch name "${branchName.trim()}").\nInclude it as the conventional commit scope, e.g. "type(${ticket.toLowerCase()}): subject".`;
+    console.info(
+      colors.gray(
+        `ℹ️  Detected ticket ${colors.blue(ticket)} from branch ${colors.blue(branchName.trim())}`,
+      ),
+    );
   }
 
   let commitMessage = "";
