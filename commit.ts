@@ -516,8 +516,11 @@ Use -- to pass options that may conflict with this CLI.
         }),
       ),
       debug:
-        (await prompt("Enter debug", { default: configSaved["debug"] })) ===
-          "true",
+        (await $.select({
+          message: "Debug mode? (prints extra information)",
+          options: ["no", "yes"],
+          initialIndex: configSaved["debug"] ? 1 : 0,
+        })) === 1,
       "co-author": coAuthorPattern,
       providers: {
         ...configSaved.providers,
