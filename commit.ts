@@ -410,6 +410,24 @@ export async function withTimeout<T>(
   }
 }
 
+export type InteractiveMode = {
+  interactive: boolean;
+  skipEdit: boolean;
+  noCommit: boolean;
+};
+
+export function resolveInteractiveMode(
+  isTTY: boolean,
+  args: Record<string, unknown>,
+): InteractiveMode {
+  const interactive = isTTY;
+  return {
+    interactive,
+    skipEdit: !interactive || Boolean(args["skip-edit"]),
+    noCommit: Boolean(args["no-commit"]),
+  };
+}
+
 async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
@@ -467,6 +485,16 @@ async function commit(): Promise<void> {
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
+
+  const isTTY = Deno.stdin.isTerminal();
+  const mode = resolveInteractiveMode(isTTY, args);
+  if (!mode.interactive) {
+    console.warn(
+      colors.yellow(
+        "⚠️  Non-interactive terminal detected: skipping message review (--skip-edit).",
+      ),
+    );
+  }
 
   // Provider resolution
   let providerName: string = args.provider || configSaved.provider || "openai";
@@ -683,6 +711,12 @@ Use -- to pass options that may conflict with this CLI.
 
   let finalApiKey = apiKey;
   if (!finalApiKey && provider.requiresApiKey) {
+    if (!mode.interactive) {
+      console.error(
+        `No API key for ${providerName}. Set ${provider.envVar} or pass --api-key when running non-interactively.`,
+      );
+      Deno.exit(1);
+    }
     finalApiKey = await $.prompt(
       `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
       {
@@ -693,6 +727,12 @@ Use -- to pass options that may conflict with this CLI.
 
   let finalBaseURL = baseURL;
   if (!finalBaseURL && provider.requiresBaseUrl) {
+    if (!mode.interactive) {
+      console.error(
+        `No base URL for ${providerName}. Set ${provider.baseURLEnvVar} or pass --base-URL when running non-interactively.`,
+      );
+      Deno.exit(1);
+    }
     finalBaseURL = await $.prompt(
       `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
     );
@@ -705,17 +745,25 @@ Use -- to pass options that may conflict with this CLI.
     coAuthorPattern.trim() && coAuthorPattern.includes("{email}") &&
     !coAuthorEmail
   ) {
-    coAuthorEmail = await prompt(
-      `Enter co-author email for ${providerName} (leave empty to skip signature)`,
-      { default: `noreply@${providerName}.com` },
-    );
-    if (coAuthorEmail) {
-      configSaved.providers[providerName] = {
-        ...providerConfig,
-        "co-author-email": coAuthorEmail,
-      };
-      localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
-      console.info("Co-author email saved.");
+    if (!mode.interactive) {
+      console.warn(
+        colors.yellow(
+          "⚠️  Co-author email not set: signature skipped. Set --co-author-email or --config.",
+        ),
+      );
+    } else {
+      coAuthorEmail = await prompt(
+        `Enter co-author email for ${providerName} (leave empty to skip signature)`,
+        { default: `noreply@${providerName}.com` },
+      );
+      if (coAuthorEmail) {
+        configSaved.providers[providerName] = {
+          ...providerConfig,
+          "co-author-email": coAuthorEmail,
+        };
+        localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+        console.info("Co-author email saved.");
+      }
     }
   }
 
@@ -858,12 +906,12 @@ Use -- to pass options that may conflict with this CLI.
       console.warn(colors.yellow(issueWarning));
     }
 
-    if (args["no-commit"]) {
+    if (mode.noCommit) {
       console.info(commitMessage);
       return;
     }
 
-    if (args["skip-edit"]) {
+    if (mode.skipEdit) {
       break;
     }
 

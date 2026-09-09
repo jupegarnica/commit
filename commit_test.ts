@@ -14,6 +14,7 @@ import {
   KNOWN_STRING_LONG,
   KNOWN_STRING_SHORT,
   maxWordsToTokens,
+  resolveInteractiveMode,
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
   validateCommitMessage,
@@ -346,4 +347,17 @@ Deno.test("isTransientLLMError classifies timeout and auth", () => {
   assertEquals(isTransientLLMError(new Error("401 Unauthorized")), false);
   assertEquals(isTransientLLMError(new Error("429 rate limit")), false);
   assertEquals(isTransientLLMError(new Error("404 model not found")), false);
+});
+
+Deno.test("resolveInteractiveMode forces skipEdit without TTY", () => {
+  const nonTTY = resolveInteractiveMode(false, {});
+  assertEquals(nonTTY.interactive, false);
+  assertEquals(nonTTY.skipEdit, true);
+  assertEquals(nonTTY.noCommit, false);
+  const tty = resolveInteractiveMode(true, {});
+  assertEquals(tty.interactive, true);
+  assertEquals(tty.skipEdit, false);
+  const explicit = resolveInteractiveMode(true, { "skip-edit": true, "no-commit": true });
+  assertEquals(explicit.skipEdit, true);
+  assertEquals(explicit.noCommit, true);
 });
