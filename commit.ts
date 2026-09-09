@@ -594,7 +594,12 @@ Use -- to pass options that may conflict with this CLI.
   let commits = "";
   if (commitsToLearn > 0) {
     debug && console.time("git log");
-    commits = await daxSilent`git log --oneline -n ${commitsToLearn}`;
+    try {
+      commits = await $.raw`git log --oneline -n ${commitsToLearn}`.text();
+    } catch (_error) {
+      // Fresh repo with no commits yet, or unreadable history: proceed without learning examples.
+      commits = "";
+    }
     debug && console.timeEnd("git log");
     debug && console.debug({ commits });
   }
