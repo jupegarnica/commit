@@ -632,15 +632,22 @@ Use -- to pass options that may conflict with this CLI.
   let hasShownStagedDiffStat = false;
 
   while (true) {
-    commitMessage = await generateCommitMessage({
-      provider,
-      model,
-      apiKey: finalApiKey || "",
-      baseURL: finalBaseURL,
-      diff,
-      systemContent,
-      debug,
-    });
+    try {
+      commitMessage = await generateCommitMessage({
+        provider,
+        model,
+        apiKey: finalApiKey || "",
+        baseURL: finalBaseURL,
+        diff,
+        systemContent,
+        debug,
+      });
+    } catch (error) {
+      console.error(
+        error instanceof Error ? error.message : String(error),
+      );
+      Deno.exit(1);
+    }
 
     if (!commitMessage) {
       console.error("No commitMessage");
@@ -728,19 +735,57 @@ async function generateCommitMessage(opts: {
 }): Promise<string> {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
   debug && console.time("askLLM");
-  let commitMessage = await askLLM({
-    model,
-    apiKey,
-    baseURL,
-    content: diff,
-    systemContent,
-    sdk: provider.sdk,
-  });
-  debug && console.timeEnd("askLLM");
-  commitMessage = commitMessage
-    ?.trim()
-    .replace(/(^['"`]|$['"`])/, "")
-    .replace(/`/g, "'");
-  debug && console.debug({ commitMessage });
-  return commitMessage;
+  try {
+    let commitMessage = await askLLM({
+      model,
+      apiKey,
+      baseURL,
+      content: diff,
+      systemContent,
+      sdk: provider.sdk,
+    });
+    debug && console.timeEnd("askLLM");
+    commitMessage = commitMessage
+      ?.trim()
+      .replace(/(^['"`]|$['"`])/, "")
+      .replace(/`/g, "'");
+    debug && console.debug({ commitMessage });
+    return commitMessage;
+  } catch (error) {
+    debug && console.debug({ llmError: error });
+    console.timeEnd("askLLM");
+    throw new Error(friendlyLLMError(provider.sdk, model, baseURL, error), {
+      cause: error,
+    });
+  }
+}
+
+function friendlyLLMError(
+  sdk: string,
+  model: string,
+  baseURL: string | undefined,
+  error: unknown,
+): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const target = `${sdk} (${model})${baseURL ? ` at ${baseURL}` : ""}`;
+  if (/401|403|unauthorized|invalid.{0,20}(api.?|token|key)/i.test(raw)) {
+    return `The API key for ${target} was rejected. Check OPENAI_API_KEY / GEMINI_API_KEY / ANTHROPIC_API_KEY / OLLAMA_API_KEY or --api-key.`;
+  }
+  if (/429|rate.?limit/i.test(raw)) {
+    return `Rate limited by ${target}. Wait a moment and try again.`;
+  }
+  if (/404|not.?found|no such model|model.*not.*exist/i.test(raw)) {
+    return `Model not found on ${target}. Check the --model value.`;
+  }
+  if (
+    /ECONNREFUSED|ECONNRESET|fetch failed|fetch timed|connect(ion)?|refused|ENOTFOUND|ETIMEDOUT/i
+      .test(raw)
+  ) {
+    return `Could not reach ${target}. ${
+      sdk === "ollama"
+        ? "Is your Ollama server running (ollama serve) and is OLLAMA_BASE_URL correct?"
+        : "Check your network or --base-URL."
+    }`;
+  }
+  return `LLM request failed for ${target}: ${raw}`;
 }
