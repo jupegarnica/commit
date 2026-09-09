@@ -4,6 +4,7 @@ import { parseArgs } from "jsr:@std/cli@1.0.6";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
 import { confirmCommit } from "./ui/prompt.tsx";
+import { startSpinner, stopSpinner } from "./spinner.ts";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
@@ -1086,15 +1087,15 @@ async function generateCommitMessage(opts: {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
   const tokens = estimateTokens(diff);
   if (tokens > maxWordsToTokens(opts.maxWords)) {
-    console.info(
-      colors.gray(
-        `ℹ️  Diff is large (~${tokens.toLocaleString()} tokens, ${countWords(diff).toLocaleString()} words). Generating a summarized commit message from ${
-          splitDiffIntoBoundedChunks(diff, opts.maxWords).length
-        } parts...`,
-      ),
-    );
-    return await generateCommitMessageFromLargeDiff(opts);
+    startSpinner("Summarizing large diff...");
+    try {
+      const result = await generateCommitMessageFromLargeDiff(opts);
+      return result;
+    } finally {
+      stopSpinner();
+    }
   }
+  startSpinner("Generating commit message...");
   debug && console.time("askLLM");
   try {
     let commitMessage = await withTimeout(
@@ -1117,6 +1118,7 @@ async function generateCommitMessage(opts: {
     debug && console.debug({ commitMessage });
     return commitMessage;
   } catch (error) {
+    stopSpinner();
     debug && console.debug({ llmError: error });
     if (isTransientLLMError(error)) {
       console.warn(
@@ -1126,6 +1128,7 @@ async function generateCommitMessage(opts: {
           }). Retrying...`,
         ),
       );
+      startSpinner("Retrying commit message generation...");
       try {
         const retryMessage = await withTimeout(
           askLLM({
@@ -1145,6 +1148,7 @@ async function generateCommitMessage(opts: {
           .replace(/(^['"`]|$['"`])/, "")
           .replace(/`/g, "'");
       } catch (retryError) {
+        stopSpinner();
         debug && console.debug({ retryError });
         console.timeEnd("askLLM");
         throw new Error(
@@ -1158,6 +1162,8 @@ async function generateCommitMessage(opts: {
     throw new Error(friendlyLLMError(provider.sdk, model, baseURL, error), {
       cause: error,
     });
+  } finally {
+    stopSpinner();
   }
 }
 
@@ -1207,36 +1213,45 @@ async function generateCommitMessageFromLargeDiff(opts: {
   const summaries: string[] = [];
   for (const [index, chunk] of chunks.entries()) {
     debug && console.time(`summarize ${index + 1}/${chunks.length}`);
-    const summary = await askLLM({
-      model,
-      apiKey,
-      baseURL,
-      content: chunk,
-      systemContent: SUMMARY_SYSTEM_CONTENT,
-      sdk: provider.sdk,
-    });
-    debug && console.timeEnd(`summarize ${index + 1}/${chunks.length}`);
-    if (summary?.trim()) {
-      summaries.push(summary.trim());
+    startSpinner(`Summarizing part ${index + 1}/${chunks.length}...`);
+    try {
+      const summary = await askLLM({
+        model,
+        apiKey,
+        baseURL,
+        content: chunk,
+        systemContent: SUMMARY_SYSTEM_CONTENT,
+        sdk: provider.sdk,
+      });
+      debug && console.timeEnd(`summarize ${index + 1}/${chunks.length}`);
+      if (summary?.trim()) {
+        summaries.push(summary.trim());
+      }
+    } finally {
+      stopSpinner();
     }
   }
   if (summaries.length === 0) {
     return "";
   }
   debug && console.time("askLLM (final)");
+  startSpinner("Generating commit message from summaries...");
   const combined = summaries.join("\n");
-  let commitMessage = await askLLM({
-    model,
-    apiKey,
-    baseURL,
-    content: combined,
-    systemContent,
-    sdk: provider.sdk,
-  });
-  debug && console.timeEnd("askLLM (final)");
-  commitMessage = commitMessage
-    ?.trim()
-    .replace(/(^['"`]|$['"`])/, "")
-    .replace(/`/g, "'");
-  return commitMessage;
+  try {
+    let commitMessage = await askLLM({
+      model,
+      apiKey,
+      baseURL,
+      content: combined,
+      systemContent,
+      sdk: provider.sdk,
+    });
+    debug && console.timeEnd("askLLM (final)");
+    return commitMessage
+      ?.trim()
+      .replace(/(^['"`]|$['"`])/, "")
+      .replace(/`/g, "'");
+  } finally {
+    stopSpinner();
+  }
 }
