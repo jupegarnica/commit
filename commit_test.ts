@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1.0.7";
 import {
   appendCoAuthor,
+  buildRetryHint,
   buildSystemPrompt,
   collectExtraCommitArgs,
   countWords,
@@ -360,4 +361,11 @@ Deno.test("resolveInteractiveMode forces skipEdit without TTY", () => {
   const explicit = resolveInteractiveMode(true, { "skip-edit": true, "no-commit": true });
   assertEquals(explicit.skipEdit, true);
   assertEquals(explicit.noCommit, true);
+});
+
+Deno.test("buildRetryHint builds git commit command with message file", () => {
+  assertEquals(
+    buildRetryHint(".git/COMMIT_MSG_AI"),
+    "git commit --no-verify -F .git/COMMIT_MSG_AI",
+  );
 });

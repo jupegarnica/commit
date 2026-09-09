@@ -251,7 +251,7 @@ async function getPreCommitHookPath(): Promise<string | null> {
   return null;
 }
 
-async function runCommand(command: string, args: string[]) {
+async function runCommand(command: string, args: string[]): Promise<number> {
   const cmd = new Deno.Command(command, {
     args,
     stdin: "inherit",
@@ -262,6 +262,25 @@ async function runCommand(command: string, args: string[]) {
   if (code !== 0) {
     Deno.exit(code);
   }
+  return code;
+}
+
+async function runCommandCapture(
+  command: string,
+  args: string[],
+): Promise<number> {
+  const cmd = new Deno.Command(command, {
+    args,
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const { code } = await cmd.output();
+  return code;
+}
+
+export function buildRetryHint(messagePath: string): string {
+  return `git commit --no-verify -F ${messagePath}`;
 }
 
 export function extractTicketFromBranch(
@@ -950,7 +969,20 @@ Use -- to pass options that may conflict with this CLI.
   }
 
   commitArgs.push("-m", commitMessage);
-  await runCommand("git", commitArgs);
+  const code = await runCommandCapture("git", commitArgs);
+  if (code !== 0) {
+    const messagePath = await daxSilent`git rev-parse --git-path COMMIT_MSG_AI`;
+    const trimmedPath = messagePath.trim();
+    try {
+      await Deno.writeTextFile(trimmedPath, `${commitMessage}\n`);
+      console.error(
+        `✗ Commit failed (exit ${code}). Your approved message is saved at:\n  ${trimmedPath}\n  Retry with: ${buildRetryHint(trimmedPath)}`,
+      );
+    } catch (_writeError) {
+      console.error(`✗ Commit failed (exit ${code}).`);
+    }
+    Deno.exit(code);
+  }
 
   if (args.push) {
     await $`git push`;
