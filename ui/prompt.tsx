@@ -2,7 +2,7 @@ import React from "react";
 import { Box, useApp, useBoxMetrics, render } from "ink";
 import { Textarea, Form, Label, Input, Button, Div, Html, Body } from "@garn/ink-html";
 
-type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
+type ConfirmCommitAction = "commit" | "regenerate" | "feedback" | "cancel";
 
 type ConfirmCommitResult = {
     action: ConfirmCommitAction;
@@ -231,6 +231,9 @@ function ConfirmCommitPrompt({
         } else if (e.key === "r" && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             submit("regenerate");
+        } else if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            submit("feedback");
         } else if (e.key === "Escape") {
             e.preventDefault();
             submit("cancel");
@@ -283,6 +286,15 @@ function ConfirmCommitPrompt({
                         onClick={() => submit("regenerate")}
                     >
                         Regenerate (⌃R)
+                    </Button>
+                    <Button
+                        id={`${inputId}-feedback`}
+                        tabIndex={0}
+                        hidden={false}
+                        autoFocus={false}
+                        onClick={() => submit("feedback")}
+                    >
+                        Feedback (⌃F)
                     </Button>
                     <Button
                         id={`${inputId}-cancel`}

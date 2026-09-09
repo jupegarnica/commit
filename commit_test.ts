@@ -369,3 +369,14 @@ Deno.test("buildRetryHint builds git commit command with message file", () => {
     "git commit --no-verify -F .git/COMMIT_MSG_AI",
   );
 });
+
+Deno.test("buildSystemPrompt includes previous attempt for feedback", () => {
+  const prompt = buildSystemPrompt({
+    hint: "shorter",
+    previousAttempt: "feat: some long message",
+  });
+  assertEquals(prompt.includes("Previous attempt"), true);
+  assertEquals(prompt.includes("feat: some long message"), true);
+  assertEquals(prompt.includes("shorter"), true);
+  assertEquals(buildSystemPrompt({}).includes("Previous attempt"), false);
+});
