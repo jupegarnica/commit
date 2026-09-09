@@ -17,7 +17,6 @@ function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, value));
 }
 
-
 function countWrappedRows(value: string, width: number) {
     const safeWidth = Math.max(1, width);
     const lines = value.length > 0 ? value.split("\n") : [""];
