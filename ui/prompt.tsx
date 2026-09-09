@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, useApp, useBoxMetrics, render } from "ink";
+import { Box, useApp, useBoxMetrics, render, useInput } from "ink";
 import { Textarea, Form, Label, Input, Button, Div, Html, Body } from "@garn/ink-html";
 
 type ConfirmCommitAction = "commit" | "regenerate" | "feedback" | "cancel";
@@ -221,31 +221,42 @@ function ConfirmCommitPrompt({
 
     const submit = React.useCallback(
         (action: ConfirmCommitAction) => {
+            if (isSubmitting) return;
             setIsSubmitting(true);
             onSubmit({ action, value });
             setTimeout(() => {
                 exit();
             }, 100);
         },
-        [onSubmit, value, exit],
+        [isSubmitting, onSubmit, value, exit],
     );
 
-    const handleKeyDown = (e: any) => {
+    // All keys are captured via useInput: the textarea's onKeyDown never
+    // receives Enter/letters (ink-html consumes raw input through its own
+    // useInput pipeline). Enter here is key.return.
+    useInput((input, key) => {
         if (isSubmitting) return;
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
+        if (key.return) {
             submit("commit");
-        } else if (e.key === "r" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            submit("regenerate");
-        } else if (e.key === "f" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            submit("feedback");
-        } else if (e.key === "Escape") {
-            e.preventDefault();
+        } else if (key.escape) {
             submit("cancel");
+        } else if (key.ctrl) {
+            return;
+        } else {
+            for (const ch of input) {
+                if (ch === "r") {
+                    submit("regenerate");
+                    return;
+                } else if (ch === "f") {
+                    submit("feedback");
+                    return;
+                } else if (ch === "x") {
+                    submit("cancel");
+                    return;
+                }
+            }
         }
-    };
+    });
 
     return (
         <Form style={{ flexDirection: "column", gap: 0 }}>
@@ -265,7 +276,6 @@ function ConfirmCommitPrompt({
                     }}
                     value={value}
                     onChange={(e: any) => setValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
                 ></Textarea>
             </Box>
             {!isSubmitting && (
@@ -292,7 +302,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("regenerate")}
                     >
-                        Regenerate (⌃R)
+                        Regenerate
                     </Button>
                     <Button
                         id={`${inputId}-feedback`}
@@ -301,7 +311,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("feedback")}
                     >
-                        Feedback (⌃F)
+                        Feedback
                     </Button>
                     <Button
                         id={`${inputId}-cancel`}

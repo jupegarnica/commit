@@ -1286,7 +1286,6 @@ async function generateCommitMessageFromLargeDiff(opts: {
     stopSpinner();
   }
 }
-
 if (import.meta.main) {
   await commit();
 }
