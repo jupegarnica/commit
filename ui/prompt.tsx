@@ -54,9 +54,16 @@ async function renderPrompt<T>(node: React.ReactElement, fallbackValue: T, resul
 
 async function renderCommittedPrompt<T>(node: React.ReactElement, result: { value: T }) {
     const { waitUntilExit, clear } = render(node);
-    await waitUntilExit();
+    const code = await waitUntilExit();
     clear();
     await new Promise((resolve) => setTimeout(resolve, 100));
+
+    if (code !== 0) {
+        // Aborted (e.g. Ctrl+C): treat as explicit cancel, mirroring renderPrompt.
+        const cancelled = { ...result.value, action: "cancel" as const };
+        result.value = cancelled;
+        return result.value;
+    }
 
     return result.value;
 }
