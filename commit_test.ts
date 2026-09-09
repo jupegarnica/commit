@@ -5,6 +5,7 @@ import {
   collectExtraCommitArgs,
   countWords,
   extractTicketFromBranch,
+  formatCommitMessageIssues,
   hasNoVerifyFlag,
   KNOWN_BOOLEAN_LONG,
   KNOWN_BOOLEAN_SHORT,
@@ -12,6 +13,7 @@ import {
   KNOWN_STRING_SHORT,
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
+  validateCommitMessage,
 } from "./commit.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
@@ -264,4 +266,44 @@ Deno.test("buildSystemPrompt adds hint and body when provided", () => {
   const without = buildSystemPrompt({});
   assertEquals(without.includes("fixes #123"), false);
   assertEquals(without.includes('starting with "- "'), false);
+});
+
+Deno.test("validateCommitMessage accepts clean conventional subjects", () => {
+  assertEquals(validateCommitMessage("feat: add login"), {
+    tooLong: false,
+    missingPrefix: false,
+    trailingPeriod: false,
+  });
+  assertEquals(
+    validateCommitMessage("fix(auth): handle null user\n\nbody here"),
+    {
+      tooLong: false,
+      missingPrefix: false,
+      trailingPeriod: false,
+    },
+  );
+});
+
+Deno.test("validateCommitMessage detects long subjects and trailing period", () => {
+  const long = "feat: " + "x".repeat(70);
+  const issues = validateCommitMessage(long);
+  assertEquals(issues.tooLong, true);
+  assertEquals(issues.missingPrefix, false);
+  assertEquals(validateCommitMessage("feat: add login.").trailingPeriod, true);
+});
+
+Deno.test("validateCommitMessage detects missing conventional prefix", () => {
+  assertEquals(validateCommitMessage("update the login page").missingPrefix, true);
+  assertEquals(validateCommitMessage("feat: add login").missingPrefix, false);
+  assertEquals(validateCommitMessage("featx: add login").missingPrefix, true);
+});
+
+Deno.test("formatCommitMessageIssues renders human readable warnings", () => {
+  const subject = "x".repeat(80);
+  const warning = formatCommitMessageIssues(
+    validateCommitMessage("feat: " + "x".repeat(80)),
+    "feat: " + "x".repeat(80),
+  );
+  assertEquals(warning?.includes("chars (> 72)"), true);
+  assertEquals(formatCommitMessageIssues(validateCommitMessage("feat: ok"), "feat: ok"), null);
 });
