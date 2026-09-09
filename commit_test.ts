@@ -2,7 +2,10 @@ import { assertEquals } from "jsr:@std/assert@1.0.7";
 import {
   appendCoAuthor,
   collectExtraCommitArgs,
+  countWords,
   hasNoVerifyFlag,
+  splitDiffIntoBoundedChunks,
+  splitDiffIntoChunks,
 } from "./commit.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
@@ -167,4 +170,37 @@ Deno.test("collectExtraCommitArgs skips --co-author-email with value", () => {
 Deno.test("collectExtraCommitArgs skips --co-author-email with = value", () => {
   const args = ["--co-author-email=noreply@openai.com", "--push"];
   assertEquals(collectExtraCommitArgs(args), []);
+});
+
+Deno.test("countWords counts whitespace-separated words", () => {
+  assertEquals(countWords("hello world"), 2);
+  assertEquals(countWords("  a   b  c "), 3);
+  assertEquals(countWords(""), 0);
+  assertEquals(countWords("   "), 0);
+});
+
+Deno.test("splitDiffIntoChunks splits on diff --git headers", () => {
+  const diff = [
+    "diff --git a/a.ts b/a.ts",
+    "+++ a.ts",
+    "+hello",
+    "diff --git a/b.ts b/b.ts",
+    "+++ b.ts",
+    "+world",
+  ].join("\n");
+  const chunks = splitDiffIntoChunks(diff);
+  assertEquals(chunks.length, 2);
+  assertEquals(chunks[0].includes("a.ts"), true);
+  assertEquals(chunks[1].includes("b.ts"), true);
+});
+
+Deno.test("splitDiffIntoBoundedChunks respects budget and keeps big chunks whole", () => {
+  const small = (name: string) =>
+    `diff --git a/${name} b/${name}\n+${"word ".repeat(50)}`;
+  const diff = [small("a"), small("b"), small("c"), small("d")].join("\n");
+  const chunks = splitDiffIntoBoundedChunks(diff, 600);
+  assertEquals(chunks.length, 2);
+  const huge = `diff --git a/huge b/huge\n+${"word ".repeat(1000)}`;
+  const withHuge = splitDiffIntoBoundedChunks(`${small("a")}\n${huge}`, 600);
+  assertEquals(withHuge.length, 2);
 });

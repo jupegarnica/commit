@@ -579,12 +579,8 @@ Use -- to pass options that may conflict with this CLI.
     return Deno.exit(1);
   }
 
-  const words = diff.split(" ").length;
+  const words = countWords(diff);
   debug && console.debug({ words });
-  if (words > MAX_WORD) {
-    console.error(`Input is too long: ${words} words`);
-    Deno.exit(1);
-  }
 
   const commitsToLearn = Number(args["commits-to-learn"]) || 10;
   if (isNaN(commitsToLearn)) {
@@ -640,6 +636,7 @@ Use -- to pass options that may conflict with this CLI.
         baseURL: finalBaseURL,
         diff,
         systemContent,
+        maxWords: MAX_WORD,
         debug,
       });
     } catch (error) {
@@ -724,6 +721,76 @@ async function prompt(
   return String(result).trim();
 }
 
+export function countWords(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return 0;
+  }
+  return trimmed.split(/\s+/).length;
+}
+
+const DIFF_FILE_HEADER = /^diff --git /;
+
+export function splitDiffIntoChunks(diff: string): string[] {
+  const lines = diff.split("\n");
+  const chunks: string[] = [];
+  let current: string[] = [];
+  for (const line of lines) {
+    if (DIFF_FILE_HEADER.test(line) && current.length > 0) {
+      chunks.push(current.join("\n"));
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) {
+    chunks.push(current.join("\n"));
+  }
+  return chunks.filter((chunk) => chunk.trim().length > 0);
+}
+
+function chunkBudgetWords(maxWords: number): number {
+  return Math.max(200, Math.floor(maxWords / 3));
+}
+
+export function splitDiffIntoBoundedChunks(
+  diff: string,
+  maxWords: number,
+): string[] {
+  const budget = chunkBudgetWords(maxWords);
+  const fileChunks = splitDiffIntoChunks(diff);
+  const bounded: string[] = [];
+  let current: string[] = [];
+  let currentWords = 0;
+  for (const chunk of fileChunks) {
+    const chunkWords = countWords(chunk);
+    if (chunkWords > budget) {
+      if (current.length > 0) {
+        bounded.push(current.join("\n"));
+        current = [];
+        currentWords = 0;
+      }
+      bounded.push(chunk);
+      continue;
+    }
+    if (currentWords + chunkWords > budget && current.length > 0) {
+      bounded.push(current.join("\n"));
+      current = [];
+      currentWords = 0;
+    }
+    current.push(chunk);
+    currentWords += chunkWords;
+  }
+  if (current.length > 0) {
+    bounded.push(current.join("\n"));
+  }
+  return bounded;
+}
+
+const SUMMARY_SYSTEM_CONTENT = `You are an expert in git diffs.
+You are summarizing one part of a large git diff to later write a commit message.
+Describe concisely (max 80 words) the most important changes in this part.
+Do not include file names, line numbers, or markdown. Output plain text only.`;
+
 async function generateCommitMessage(opts: {
   provider: { sdk: "openai" | "anthropic" | "ollama" | "google" };
   model: string;
@@ -731,9 +798,19 @@ async function generateCommitMessage(opts: {
   baseURL: string | undefined;
   diff: string;
   systemContent: string;
+  maxWords: number;
   debug: boolean;
 }): Promise<string> {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
+  const words = countWords(diff);
+  if (words > opts.maxWords) {
+    console.info(
+      colors.gray(
+        `ℹ️  Diff is large (${words} words). Generating a summarized commit message from ${splitDiffIntoBoundedChunks(diff, opts.maxWords).length} parts...`,
+      ),
+    );
+    return await generateCommitMessageFromLargeDiff(opts);
+  }
   debug && console.time("askLLM");
   try {
     let commitMessage = await askLLM({
@@ -788,4 +865,54 @@ function friendlyLLMError(
     }`;
   }
   return `LLM request failed for ${target}: ${raw}`;
+}
+
+async function generateCommitMessageFromLargeDiff(opts: {
+  provider: { sdk: "openai" | "anthropic" | "ollama" | "google" };
+  model: string;
+  apiKey: string;
+  baseURL: string | undefined;
+  diff: string;
+  systemContent: string;
+  maxWords: number;
+  debug: boolean;
+}): Promise<string> {
+  const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
+  const chunks = splitDiffIntoBoundedChunks(diff, opts.maxWords);
+  debug && console.debug({ chunkCount: chunks.length });
+  const summaries: string[] = [];
+  for (const [index, chunk] of chunks.entries()) {
+    debug && console.time(`summarize ${index + 1}/${chunks.length}`);
+    const summary = await askLLM({
+      model,
+      apiKey,
+      baseURL,
+      content: chunk,
+      systemContent: SUMMARY_SYSTEM_CONTENT,
+      sdk: provider.sdk,
+    });
+    debug && console.timeEnd(`summarize ${index + 1}/${chunks.length}`);
+    if (summary?.trim()) {
+      summaries.push(summary.trim());
+    }
+  }
+  if (summaries.length === 0) {
+    return "";
+  }
+  debug && console.time("askLLM (final)");
+  const combined = summaries.join("\n");
+  let commitMessage = await askLLM({
+    model,
+    apiKey,
+    baseURL,
+    content: combined,
+    systemContent,
+    sdk: provider.sdk,
+  });
+  debug && console.timeEnd("askLLM (final)");
+  commitMessage = commitMessage
+    ?.trim()
+    .replace(/(^['"`]|$['"`])/, "")
+    .replace(/`/g, "'");
+  return commitMessage;
 }
