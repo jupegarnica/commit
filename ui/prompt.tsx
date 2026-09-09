@@ -212,12 +212,29 @@ function ConfirmCommitPrompt({
     const inputId = React.useId();
     const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1, maxRows: 16 });
 
-    const submit = (action: ConfirmCommitAction) => {
-        setIsSubmitting(true);
-        onSubmit({ action, value });
-        setTimeout(() => {
-            exit();
-        }, 100);
+    const submit = React.useCallback(
+        (action: ConfirmCommitAction) => {
+            setIsSubmitting(true);
+            onSubmit({ action, value });
+            setTimeout(() => {
+                exit();
+            }, 100);
+        },
+        [onSubmit, value, exit],
+    );
+
+    const handleKeyDown = (e: any) => {
+        if (isSubmitting) return;
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            submit("commit");
+        } else if (e.key === "r" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            submit("regenerate");
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            submit("cancel");
+        }
     };
 
     return (
@@ -238,6 +255,7 @@ function ConfirmCommitPrompt({
                     }}
                     value={value}
                     onChange={(e: any) => setValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
                 ></Textarea>
             </Box>
             {!isSubmitting && (
@@ -255,7 +273,7 @@ function ConfirmCommitPrompt({
                         hidden={false}
                         onClick={() => submit("commit")}
                     >
-                        Commit
+                        Commit (⏎)
                     </Button>
                     <Button
                         id={`${inputId}-regenerate`}
@@ -264,7 +282,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("regenerate")}
                     >
-                        Regenerate
+                        Regenerate (⌃R)
                     </Button>
                     <Button
                         id={`${inputId}-cancel`}
@@ -273,7 +291,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("cancel")}
                     >
-                        Cancel
+                        Cancel (Esc)
                     </Button>
                 </Div>
             )}
