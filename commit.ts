@@ -45,6 +45,8 @@ export const CLI_FLAGS: FlagDef[] = [
   { name: "provider", short: "p", type: "string" },
   { name: "co-author", type: "string" },
   { name: "co-author-email", type: "string" },
+  { name: "commit-language", type: "string" },
+  { name: "commit-style", type: "string" },
 ];
 
 // parseArgs treats extra aliases as booleans, so single-char aliases of
@@ -277,6 +279,46 @@ export function extractTicketFromBranch(
   return /^[A-Z]{2,10}-\d{1,6}$/.test(ticket) ? ticket : null;
 }
 
+export function buildSystemPrompt(options: {
+  commits?: string;
+  ticket?: string | null;
+  language?: string;
+  style?: string;
+}): string {
+  let systemContent = `You are an expert in git diffs.
+    You are helping a user to create a commit message for a git diff.
+    You should use conventional commit notation to create a commit message for this git diff.
+    And follow this conventional commits rules:
+    - 'feat:' for new features where the code behavior changes
+    - 'fix:' for bug fixes where the code behavior changes
+    - 'refactor:' for code refactoring where the code behavior does not change,
+    - 'docs:' for documentation changes,
+    - 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc),
+    - 'test:' for adding tests,
+    - 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.
+    Do not use any markdown markup, only text.
+    Only describe the changes in the code, do not include any other information like purpose of the changes or which file has been modified.
+    Do not output any file names or line numbers.
+    If the git diff is empty return an empty string with zero characters.
+    Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
+    `;
+  if (options.commits) {
+    systemContent +=
+      `\nYou should follow the commit style of these commits:\n${options.commits}`;
+  }
+  if (options.language) {
+    systemContent += `\nWrite the commit message in ${options.language}.`;
+  }
+  if (options.style) {
+    systemContent += `\nUse this commit style: ${options.style}.`;
+  }
+  if (options.ticket) {
+    systemContent +=
+      `\nThis work relates to ticket ${options.ticket} (inferred from the git branch name).\nInclude it as the conventional commit scope, e.g. "type(${options.ticket.toLowerCase()}): subject".`;
+  }
+  return systemContent;
+}
+
 async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
@@ -298,6 +340,8 @@ async function commit(): Promise<void> {
   "debug": false,
   "provider": "openai",
   "co-author": "",
+  "commit-language": "",
+  "commit-style": "",
   "providers": {
     "openai": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
     "google": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
@@ -374,6 +418,8 @@ Use -- to pass options that may conflict with this CLI.
 -W, --max-words <maxWords>: Specifies the maximum number of words to call the api. The default is 10000.
 --co-author <pattern>: Appends a signature to the commit message. Placeholders: {model} (resolved model id), {email} (co-author email for the provider, prompted and saved on first use). Example: "Co-Authored-By: {model} <{email}>". Leave empty in --config to disable.
 --co-author-email <email>: Overrides the co-author email for this run (resolves the {email} placeholder). Overrides the saved provider config.
+--commit-language <lang>: Language for the commit message (e.g. "Spanish"). Overrides the saved config.
+--commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Overrides the saved config.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -522,6 +568,14 @@ Use -- to pass options that may conflict with this CLI.
           initialIndex: configSaved["debug"] ? 1 : 0,
         })) === 1,
       "co-author": coAuthorPattern,
+      "commit-language": await prompt(
+        "Enter commit language (e.g. English, Spanish; leave empty for English)",
+        { default: configSaved["commit-language"] || "" },
+      ),
+      "commit-style": await prompt(
+        "Enter commit style (e.g. 'imperative mood, max 72 chars'; leave empty for default)",
+        { default: configSaved["commit-style"] || "" },
+      ),
       providers: {
         ...configSaved.providers,
         [selectedProvider]: newProviderConfig,
@@ -632,28 +686,6 @@ Use -- to pass options that may conflict with this CLI.
     debug && console.debug({ commits });
   }
 
-  let systemContent = `You are an expert in git diffs.
-    You are helping a user to create a commit message for a git diff.
-    You should use conventional commit notation to create a commit message for this git diff.
-    And follow this conventional commits rules:
-    - 'feat:' for new features where the code behavior changes
-    - 'fix:' for bug fixes where the code behavior changes
-    - 'refactor:' for code refactoring where the code behavior does not change,
-    - 'docs:' for documentation changes,
-    - 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc),
-    - 'test:' for adding tests,
-    - 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.
-    Do not use any markdown markup, only text.
-    Only describe the changes in the code, do not include any other information like purpose of the changes or which file has been modified.
-    Do not output any file names or line numbers.
-    If the git diff is empty return an empty string with zero characters.
-    Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
-    `;
-  if (commits) {
-    systemContent +=
-      `\nYou should follow the commit style of these commits:\n${commits}`;
-  }
-
   let branchName = "";
   try {
     branchName = await $`git rev-parse --abbrev-ref HEAD`.text();
@@ -662,14 +694,30 @@ Use -- to pass options that may conflict with this CLI.
   }
   const ticket = extractTicketFromBranch(branchName.trim());
   if (ticket) {
-    systemContent +=
-      `\nThis work relates to ticket ${ticket} (inferred from the git branch name "${branchName.trim()}").\nInclude it as the conventional commit scope, e.g. "type(${ticket.toLowerCase()}): subject".`;
     console.info(
       colors.gray(
         `ℹ️  Detected ticket ${colors.blue(ticket)} from branch ${colors.blue(branchName.trim())}`,
       ),
     );
   }
+  const commitLanguage = args["commit-language"] ||
+    configSaved["commit-language"] || "";
+  const commitStyle = args["commit-style"] ||
+    configSaved["commit-style"] || "";
+  if (commitLanguage) {
+    console.info(
+      colors.gray(`ℹ️  Commit language: ${colors.blue(commitLanguage)}`),
+    );
+  }
+  if (commitStyle) {
+    console.info(colors.gray(`ℹ️  Commit style: ${colors.blue(commitStyle)}`));
+  }
+  const systemContent = buildSystemPrompt({
+    commits,
+    ticket,
+    language: commitLanguage,
+    style: commitStyle,
+  });
 
   let commitMessage = "";
   const stagedDiffStat =

@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1.0.7";
 import {
   appendCoAuthor,
+  buildSystemPrompt,
   collectExtraCommitArgs,
   countWords,
   extractTicketFromBranch,
@@ -219,7 +220,36 @@ Deno.test("buildKnownSets derives expected flag sets from CLI_FLAGS", () => {
   assertEquals(KNOWN_STRING_SHORT.has("K"), true);
   assertEquals(KNOWN_BOOLEAN_SHORT.has("Y"), true);
   assertEquals(KNOWN_BOOLEAN_LONG.size, 9);
-  assertEquals(KNOWN_STRING_LONG.size, 9);
+  assertEquals(KNOWN_STRING_LONG.size, 11);
   assertEquals(KNOWN_BOOLEAN_SHORT.size, 11);
   assertEquals(KNOWN_STRING_SHORT.size, 7);
+});
+
+Deno.test("buildSystemPrompt includes commits and ticket", () => {
+  const prompt = buildSystemPrompt({
+    commits: "abc123 fix: one\ndef456 feat: two",
+    ticket: "PROJ-123",
+  });
+  assertEquals(prompt.includes("You should follow the commit style"), true);
+  assertEquals(prompt.includes("abc123 fix: one"), true);
+  assertEquals(prompt.includes("PROJ-123"), true);
+  assertEquals(prompt.includes("type(proj-123)"), true);
+});
+
+Deno.test("buildSystemPrompt without extras omits optional sections", () => {
+  const prompt = buildSystemPrompt({});
+  assertEquals(prompt.includes("conventional commit"), true);
+  assertEquals(prompt.includes("commit style of these commits"), false);
+  assertEquals(prompt.includes("ticket"), false);
+  assertEquals(prompt.includes("Write the commit message in"), false);
+  assertEquals(prompt.includes("Use this commit style"), false);
+});
+
+Deno.test("buildSystemPrompt adds language and style when provided", () => {
+  const prompt = buildSystemPrompt({
+    language: "Spanish",
+    style: "imperative mood",
+  });
+  assertEquals(prompt.includes("Write the commit message in Spanish"), true);
+  assertEquals(prompt.includes("Use this commit style: imperative mood"), true);
 });
