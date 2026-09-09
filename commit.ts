@@ -14,42 +14,95 @@ async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   }
 }
 
-const KNOWN_BOOLEAN_LONG = new Set([
-  "add",
-  "push",
-  "debug",
-  "config",
-  "skip-edit",
-  "no-commit",
-  "help",
-  "version",
-  "amend",
-]);
-const KNOWN_STRING_LONG = new Set([
-  "api-key",
-  "model",
-  "base-URL",
-  "max-words",
-  "commits-to-learn",
-  "unified",
-  "provider",
-  "co-author",
-  "co-author-email",
-]);
-const KNOWN_BOOLEAN_SHORT = new Set([
-  "A",
-  "P",
-  "D",
-  "C",
-  "S",
-  "Y",
-  "y",
-  "N",
-  "H",
-  "V",
-  "E",
-]);
-const KNOWN_STRING_SHORT = new Set(["K", "M", "B", "W", "L", "U", "p"]);
+// Extra single-char aliases that behave like a boolean but are not unique
+// flags (documented as synonyms of --skip-edit).
+const EXTRA_ALIASES: Record<string, string[]> = {
+  "skip-edit": ["Y", "y"],
+};
+
+export type FlagDef = {
+  name: string;
+  short?: string;
+  type: "boolean" | "string";
+};
+
+export const CLI_FLAGS: FlagDef[] = [
+  { name: "add", short: "A", type: "boolean" },
+  { name: "push", short: "P", type: "boolean" },
+  { name: "amend", short: "E", type: "boolean" },
+  { name: "debug", short: "D", type: "boolean" },
+  { name: "config", short: "C", type: "boolean" },
+  { name: "skip-edit", short: "S", type: "boolean" },
+  { name: "no-commit", short: "N", type: "boolean" },
+  { name: "help", short: "H", type: "boolean" },
+  { name: "version", short: "V", type: "boolean" },
+  { name: "api-key", short: "K", type: "string" },
+  { name: "model", short: "M", type: "string" },
+  { name: "base-URL", short: "B", type: "string" },
+  { name: "max-words", short: "W", type: "string" },
+  { name: "commits-to-learn", short: "L", type: "string" },
+  { name: "unified", short: "U", type: "string" },
+  { name: "provider", short: "p", type: "string" },
+  { name: "co-author", type: "string" },
+  { name: "co-author-email", type: "string" },
+];
+
+// parseArgs treats extra aliases as booleans, so single-char aliases of
+// string flags need special handling in collectExtraCommitArgs.
+function buildKnownSets(flags: FlagDef[]): {
+  booleanLong: Set<string>;
+  stringLong: Set<string>;
+  booleanShort: Set<string>;
+  stringShort: Set<string>;
+} {
+  const booleanLong = new Set<string>();
+  const stringLong = new Set<string>();
+  const booleanShort = new Set<string>();
+  const stringShort = new Set<string>();
+  for (const flag of flags) {
+    if (flag.type === "boolean") {
+      booleanLong.add(flag.name);
+      for (const short of [flag.short, ...(EXTRA_ALIASES[flag.name] || [])]) {
+        if (short) booleanShort.add(short);
+      }
+    } else {
+      stringLong.add(flag.name);
+      if (flag.short) stringShort.add(flag.short);
+    }
+  }
+  return { booleanLong, stringLong, booleanShort, stringShort };
+}
+
+export const {
+  booleanLong: KNOWN_BOOLEAN_LONG,
+  stringLong: KNOWN_STRING_LONG,
+  booleanShort: KNOWN_BOOLEAN_SHORT,
+  stringShort: KNOWN_STRING_SHORT,
+} = buildKnownSets(CLI_FLAGS);
+
+export function buildParseArgsOptions(flags: FlagDef[]): {
+  boolean: string[];
+  string: string[];
+  alias: Record<string, string | string[]>;
+} {
+  const boolean: string[] = [];
+  const string: string[] = [];
+  const alias: Record<string, string | string[]> = {};
+  for (const flag of flags) {
+    if (flag.type === "boolean") {
+      boolean.push(flag.name);
+    } else {
+      string.push(flag.name);
+    }
+    const shorts = [flag.short, ...(EXTRA_ALIASES[flag.name] || [])].filter(
+      (s): s is string => Boolean(s),
+    );
+    if (shorts.length > 0) {
+      alias[flag.name] = shorts.length === 1 ? shorts[0] : shorts;
+    }
+  }
+  return { boolean, string, alias };
+}
 
 export function collectExtraCommitArgs(argv: string[]): string[] {
   const extras: string[] = [];
@@ -233,48 +286,7 @@ async function commit(): Promise<void> {
     ? []
     : Deno.args.slice(passthroughIndex + 1);
 
-  const args = parseArgs(argsToParse, {
-    boolean: [
-      "add",
-      "push",
-      "debug",
-      "config",
-      "skip-edit",
-      "no-commit",
-      "help",
-      "version",
-      "amend",
-    ],
-    string: [
-      "api-key",
-      "model",
-      "base-URL",
-      "max-words",
-      "commits-to-learn",
-      "unified",
-      "provider",
-      "co-author",
-      "co-author-email",
-    ],
-    alias: {
-      add: "A",
-      push: "P",
-      amend: "E",
-      debug: "D",
-      config: "C",
-      "skip-edit": ["S", "Y", "y"],
-      "no-commit": "N",
-      help: "H",
-      "api-key": "K",
-      model: "M",
-      "base-URL": "B",
-      "max-words": "W",
-      "commits-to-learn": "L",
-      unified: "U",
-      version: "V",
-      provider: "p",
-    },
-  });
+  const args = parseArgs(argsToParse, buildParseArgsOptions(CLI_FLAGS));
   const extraCommitArgs = [
     ...collectExtraCommitArgs(argsToParse),
     ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),

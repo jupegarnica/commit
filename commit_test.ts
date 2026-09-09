@@ -5,6 +5,10 @@ import {
   countWords,
   extractTicketFromBranch,
   hasNoVerifyFlag,
+  KNOWN_BOOLEAN_LONG,
+  KNOWN_BOOLEAN_SHORT,
+  KNOWN_STRING_LONG,
+  KNOWN_STRING_SHORT,
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
 } from "./commit.ts";
@@ -206,4 +210,16 @@ Deno.test("extractTicketFromBranch ignores non-ticket branches", () => {
 Deno.test("extractTicketFromBranch is case-insensitive and uppercases", () => {
   assertEquals(extractTicketFromBranch("feat/proj-123-x"), "PROJ-123");
   assertEquals(extractTicketFromBranch("release/ab-7"), "AB-7");
+});
+
+Deno.test("buildKnownSets derives expected flag sets from CLI_FLAGS", () => {
+  assertEquals(KNOWN_BOOLEAN_LONG.has("add"), true);
+  assertEquals(KNOWN_STRING_LONG.has("co-author"), true);
+  assertEquals(KNOWN_BOOLEAN_SHORT.has("A"), true);
+  assertEquals(KNOWN_STRING_SHORT.has("K"), true);
+  assertEquals(KNOWN_BOOLEAN_SHORT.has("Y"), true);
+  assertEquals(KNOWN_BOOLEAN_LONG.size, 9);
+  assertEquals(KNOWN_STRING_LONG.size, 9);
+  assertEquals(KNOWN_BOOLEAN_SHORT.size, 11);
+  assertEquals(KNOWN_STRING_SHORT.size, 7);
 });
