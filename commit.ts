@@ -1185,7 +1185,7 @@ async function generateCommitMessage(opts: {
       } catch (retryError) {
         stopSpinner();
         debug && console.debug({ retryError });
-        console.timeEnd("askLLM");
+        debug && console.timeEnd("askLLM");
         throw new Error(
           friendlyLLMError(provider.sdk, model, baseURL, retryError),
           { cause: retryError },
@@ -1193,7 +1193,7 @@ async function generateCommitMessage(opts: {
       }
     }
     debug && console.debug({ llmError: error });
-    console.timeEnd("askLLM");
+    debug && console.timeEnd("askLLM");
     throw new Error(friendlyLLMError(provider.sdk, model, baseURL, error), {
       cause: error,
     });
