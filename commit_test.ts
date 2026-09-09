@@ -4,6 +4,7 @@ import {
   buildSystemPrompt,
   collectExtraCommitArgs,
   countWords,
+  estimateTokens,
   extractTicketFromBranch,
   formatCommitMessageIssues,
   hasNoVerifyFlag,
@@ -11,6 +12,7 @@ import {
   KNOWN_BOOLEAN_SHORT,
   KNOWN_STRING_LONG,
   KNOWN_STRING_SHORT,
+  maxWordsToTokens,
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
   validateCommitMessage,
@@ -306,4 +308,16 @@ Deno.test("formatCommitMessageIssues renders human readable warnings", () => {
   );
   assertEquals(warning?.includes("chars (> 72)"), true);
   assertEquals(formatCommitMessageIssues(validateCommitMessage("feat: ok"), "feat: ok"), null);
+});
+
+Deno.test("estimateTokens uses 4 chars per token ceiling", () => {
+  assertEquals(estimateTokens(""), 0);
+  assertEquals(estimateTokens("abcd"), 1);
+  assertEquals(estimateTokens("abcde"), 2);
+  assertEquals(estimateTokens("a".repeat(400)), 100);
+});
+
+Deno.test("maxWordsToTokens converts words to tokens", () => {
+  assertEquals(maxWordsToTokens(10000), 13000);
+  assertEquals(maxWordsToTokens(0), 0);
 });

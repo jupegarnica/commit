@@ -369,6 +369,16 @@ export function formatCommitMessageIssues(
   return `⚠️  ${warnings.join("; ")}`;
 }
 
+// Rough token estimate: ~4 chars per token for code/diffs.
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+// Backwards-compatible limit: --max-words semantics kept, expressed in tokens.
+export function maxWordsToTokens(maxWords: number): number {
+  return Math.round(maxWords * 1.3);
+}
+
 async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
@@ -718,7 +728,8 @@ Use -- to pass options that may conflict with this CLI.
   }
 
   const words = countWords(diff);
-  debug && console.debug({ words });
+  const tokens = estimateTokens(diff);
+  debug && console.debug({ words, tokens });
 
   const commitsToLearn = Number(args["commits-to-learn"]) || 10;
   if (isNaN(commitsToLearn)) {
@@ -962,11 +973,13 @@ async function generateCommitMessage(opts: {
   debug: boolean;
 }): Promise<string> {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
-  const words = countWords(diff);
-  if (words > opts.maxWords) {
+  const tokens = estimateTokens(diff);
+  if (tokens > maxWordsToTokens(opts.maxWords)) {
     console.info(
       colors.gray(
-        `ℹ️  Diff is large (${words} words). Generating a summarized commit message from ${splitDiffIntoBoundedChunks(diff, opts.maxWords).length} parts...`,
+        `ℹ️  Diff is large (~${tokens.toLocaleString()} tokens, ${countWords(diff).toLocaleString()} words). Generating a summarized commit message from ${
+          splitDiffIntoBoundedChunks(diff, opts.maxWords).length
+        } parts...`,
       ),
     );
     return await generateCommitMessageFromLargeDiff(opts);
