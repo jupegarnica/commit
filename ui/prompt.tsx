@@ -2,7 +2,7 @@ import React from "react";
 import { Box, useApp, useBoxMetrics, render } from "ink";
 import { Textarea, Form, Label, Input, Button, Div, Html, Body } from "@garn/ink-html";
 
-type ConfirmCommitAction = "commit" | "regenerate" | "feedback" | "cancel";
+type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
 
 type ConfirmCommitResult = {
     action: ConfirmCommitAction;
@@ -272,15 +272,6 @@ function ConfirmCommitPrompt({
                         onClick={() => submit("regenerate")}
                     >
                         Regenerate
-                    </Button>
-                    <Button
-                        id={`${inputId}-feedback`}
-                        tabIndex={0}
-                        hidden={false}
-                        autoFocus={false}
-                        onClick={() => submit("feedback")}
-                    >
-                        Feedback
                     </Button>
                     <Button
                         id={`${inputId}-cancel`}

@@ -309,7 +309,6 @@ export function buildSystemPrompt(options: {
   style?: string;
   hint?: string;
   body?: boolean;
-  previousAttempt?: string;
 }): string {
   let systemContent = `You are an expert in git diffs.
     You are helping a user to create a commit message for a git diff.
@@ -345,10 +344,6 @@ export function buildSystemPrompt(options: {
   if (options.body) {
     systemContent +=
       `\nAfter the subject line, add an empty line and 3-6 bullet lines starting with "- " describing the main changes by topic.`;
-  }
-  if (options.previousAttempt) {
-    systemContent +=
-      `\nPrevious attempt (do not repeat it verbatim, address the additional context above):\n${options.previousAttempt}`;
   }
   if (options.ticket) {
     systemContent +=
@@ -889,7 +884,7 @@ Use -- to pass options that may conflict with this CLI.
   if (commitStyle) {
     console.info(colors.gray(`ℹ️  Commit style: ${colors.blue(commitStyle)}`));
   }
-  let systemContent = buildSystemPrompt({
+  const systemContent = buildSystemPrompt({
     commits,
     ticket,
     language: commitLanguage,
@@ -971,22 +966,6 @@ Use -- to pass options that may conflict with this CLI.
         Deno.exit(1);
       }
       break;
-    } else if (confirmation.action === "feedback") {
-      const feedback = await prompt(
-        "What should change in the message? (e.g. 'shorter', 'in Spanish')",
-      );
-      if (feedback) {
-        systemContent = buildSystemPrompt({
-          commits,
-          ticket,
-          language: commitLanguage,
-          style: commitStyle,
-          hint: [args.hint, feedback].filter(Boolean).join("\n"),
-          body: args.body,
-          previousAttempt: commitMessage,
-        });
-      }
-      continue;
     } else if (confirmation.action === "regenerate") {
       continue;
     } else {
