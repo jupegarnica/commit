@@ -8,6 +8,7 @@ import {
   extractTicketFromBranch,
   formatCommitMessageIssues,
   hasNoVerifyFlag,
+  isTransientLLMError,
   KNOWN_BOOLEAN_LONG,
   KNOWN_BOOLEAN_SHORT,
   KNOWN_STRING_LONG,
@@ -16,6 +17,7 @@ import {
   splitDiffIntoBoundedChunks,
   splitDiffIntoChunks,
   validateCommitMessage,
+  withTimeout,
 } from "./commit.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
@@ -320,4 +322,28 @@ Deno.test("estimateTokens uses 4 chars per token ceiling", () => {
 Deno.test("maxWordsToTokens converts words to tokens", () => {
   assertEquals(maxWordsToTokens(10000), 13000);
   assertEquals(maxWordsToTokens(0), 0);
+});
+
+Deno.test("withTimeout resolves before timeout", async () => {
+  const result = await withTimeout(Promise.resolve("ok"), 1000);
+  assertEquals(result, "ok");
+});
+
+Deno.test("withTimeout rejects on timeout", async () => {
+  const error = await withTimeout(
+    new Promise((_resolve) => setTimeout(() => {}, 500)),
+    10,
+    "LLM request",
+  ).then(() => null, (e: unknown) => e);
+  assertEquals(error instanceof Error, true);
+  assertEquals((error as Error).message.includes("timed out after 0s"), true);
+});
+
+Deno.test("isTransientLLMError classifies timeout and auth", () => {
+  assertEquals(isTransientLLMError(new Error("Request timed out")), true);
+  assertEquals(isTransientLLMError(new Error("ECONNRESET")), true);
+  assertEquals(isTransientLLMError(new Error("fetch failed")), true);
+  assertEquals(isTransientLLMError(new Error("401 Unauthorized")), false);
+  assertEquals(isTransientLLMError(new Error("429 rate limit")), false);
+  assertEquals(isTransientLLMError(new Error("404 model not found")), false);
 });

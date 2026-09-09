@@ -379,6 +379,37 @@ export function maxWordsToTokens(maxWords: number): number {
   return Math.round(maxWords * 1.3);
 }
 
+export const LLM_TIMEOUT_MS = 120_000;
+
+export function isTransientLLMError(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (/401|403|unauthorized|429|rate.?limit|404|not.?found|no such model/i.test(
+    raw,
+  )) {
+    return false;
+  }
+  return /timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|fetch failed|network/i
+    .test(raw);
+}
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label = "Operation",
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
@@ -986,14 +1017,18 @@ async function generateCommitMessage(opts: {
   }
   debug && console.time("askLLM");
   try {
-    let commitMessage = await askLLM({
-      model,
-      apiKey,
-      baseURL,
-      content: diff,
-      systemContent,
-      sdk: provider.sdk,
-    });
+    let commitMessage = await withTimeout(
+      askLLM({
+        model,
+        apiKey,
+        baseURL,
+        content: diff,
+        systemContent,
+        sdk: provider.sdk,
+      }),
+      LLM_TIMEOUT_MS,
+      "LLM request",
+    );
     debug && console.timeEnd("askLLM");
     commitMessage = commitMessage
       ?.trim()
@@ -1002,6 +1037,42 @@ async function generateCommitMessage(opts: {
     debug && console.debug({ commitMessage });
     return commitMessage;
   } catch (error) {
+    debug && console.debug({ llmError: error });
+    if (isTransientLLMError(error)) {
+      console.warn(
+        colors.yellow(
+          `⚠️  Attempt 1 failed (${
+            error instanceof Error ? error.message : String(error)
+          }). Retrying...`,
+        ),
+      );
+      try {
+        const retryMessage = await withTimeout(
+          askLLM({
+            model,
+            apiKey,
+            baseURL,
+            content: diff,
+            systemContent,
+            sdk: provider.sdk,
+          }),
+          LLM_TIMEOUT_MS,
+          "LLM request (retry)",
+        );
+        debug && console.timeEnd("askLLM");
+        return retryMessage
+          ?.trim()
+          .replace(/(^['"`]|$['"`])/, "")
+          .replace(/`/g, "'");
+      } catch (retryError) {
+        debug && console.debug({ retryError });
+        console.timeEnd("askLLM");
+        throw new Error(
+          friendlyLLMError(provider.sdk, model, baseURL, retryError),
+          { cause: retryError },
+        );
+      }
+    }
     debug && console.debug({ llmError: error });
     console.timeEnd("askLLM");
     throw new Error(friendlyLLMError(provider.sdk, model, baseURL, error), {
