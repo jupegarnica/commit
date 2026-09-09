@@ -1,6 +1,16 @@
 import React from "react";
 import { Box, useApp, useBoxMetrics, render } from "ink";
-import { Textarea, Form, Label, Input, Button, Div, Html, Body } from "@garn/ink-html";
+import {
+    Textarea,
+    Form,
+    Label,
+    Input,
+    Button,
+    Div,
+    Html,
+    Body,
+    useInkInput,
+} from "@garn/ink-html";
 
 type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
 
@@ -209,16 +219,40 @@ function ConfirmCommitPrompt({
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [isTextareaFocused, setIsTextareaFocused] = React.useState(false);
+    const isSubmittingRef = React.useRef(false);
     const inputId = React.useId();
     const { ref, rows } = useAutoGrowingTextareaRows(value, { minRows: 1, maxRows: 16 });
 
     const submit = (action: ConfirmCommitAction) => {
+        if (isSubmittingRef.current) {
+            return;
+        }
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         onSubmit({ action, value });
         setTimeout(() => {
             exit();
         }, 100);
     };
+
+    useInkInput(
+        (_input, key) => {
+            if (key.escape) {
+                submit("cancel");
+            }
+        },
+        { isActive: !isSubmitting },
+    );
+
+    useInkInput(
+        (input) => {
+            if (input === "r" || input === "R") {
+                submit("regenerate");
+            }
+        },
+        { isActive: !isSubmitting && !isTextareaFocused },
+    );
 
     return (
         <Form style={{ flexDirection: "column", gap: 0 }}>
@@ -238,6 +272,8 @@ function ConfirmCommitPrompt({
                     }}
                     value={value}
                     onChange={(e: any) => setValue(e.target.value)}
+                    onFocus={() => setIsTextareaFocused(true)}
+                    onBlur={() => setIsTextareaFocused(false)}
                 ></Textarea>
             </Box>
             {!isSubmitting && (
@@ -255,7 +291,7 @@ function ConfirmCommitPrompt({
                         hidden={false}
                         onClick={() => submit("commit")}
                     >
-                        Commit
+                        Commit (enter)
                     </Button>
                     <Button
                         id={`${inputId}-regenerate`}
@@ -264,7 +300,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("regenerate")}
                     >
-                        Regenerate
+                        Regenerate (r)
                     </Button>
                     <Button
                         id={`${inputId}-cancel`}
@@ -273,7 +309,7 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         onClick={() => submit("cancel")}
                     >
-                        Cancel
+                        Cancel (esc)
                     </Button>
                 </Div>
             )}
