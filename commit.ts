@@ -47,6 +47,8 @@ export const CLI_FLAGS: FlagDef[] = [
   { name: "co-author-email", type: "string" },
   { name: "commit-language", type: "string" },
   { name: "commit-style", type: "string" },
+  { name: "hint", type: "string" },
+  { name: "body", type: "boolean" },
 ];
 
 // parseArgs treats extra aliases as booleans, so single-char aliases of
@@ -284,6 +286,8 @@ export function buildSystemPrompt(options: {
   ticket?: string | null;
   language?: string;
   style?: string;
+  hint?: string;
+  body?: boolean;
 }): string {
   let systemContent = `You are an expert in git diffs.
     You are helping a user to create a commit message for a git diff.
@@ -311,6 +315,14 @@ export function buildSystemPrompt(options: {
   }
   if (options.style) {
     systemContent += `\nUse this commit style: ${options.style}.`;
+  }
+  if (options.hint) {
+    systemContent +=
+      `\nAdditional context from the user. Reflect it in the message if relevant:\n${options.hint}`;
+  }
+  if (options.body) {
+    systemContent +=
+      `\nAfter the subject line, add an empty line and 3-6 bullet lines starting with "- " describing the main changes by topic.`;
   }
   if (options.ticket) {
     systemContent +=
@@ -420,6 +432,8 @@ Use -- to pass options that may conflict with this CLI.
 --co-author-email <email>: Overrides the co-author email for this run (resolves the {email} placeholder). Overrides the saved provider config.
 --commit-language <lang>: Language for the commit message (e.g. "Spanish"). Overrides the saved config.
 --commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Overrides the saved config.
+--hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123").
+--body: Also generate a body with bullet points after the subject line.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -717,6 +731,8 @@ Use -- to pass options that may conflict with this CLI.
     ticket,
     language: commitLanguage,
     style: commitStyle,
+    hint: args.hint,
+    body: args.body,
   });
 
   let commitMessage = "";

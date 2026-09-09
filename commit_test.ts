@@ -219,8 +219,8 @@ Deno.test("buildKnownSets derives expected flag sets from CLI_FLAGS", () => {
   assertEquals(KNOWN_BOOLEAN_SHORT.has("A"), true);
   assertEquals(KNOWN_STRING_SHORT.has("K"), true);
   assertEquals(KNOWN_BOOLEAN_SHORT.has("Y"), true);
-  assertEquals(KNOWN_BOOLEAN_LONG.size, 9);
-  assertEquals(KNOWN_STRING_LONG.size, 11);
+  assertEquals(KNOWN_BOOLEAN_LONG.size, 10);
+  assertEquals(KNOWN_STRING_LONG.size, 12);
   assertEquals(KNOWN_BOOLEAN_SHORT.size, 11);
   assertEquals(KNOWN_STRING_SHORT.size, 7);
 });
@@ -252,4 +252,16 @@ Deno.test("buildSystemPrompt adds language and style when provided", () => {
   });
   assertEquals(prompt.includes("Write the commit message in Spanish"), true);
   assertEquals(prompt.includes("Use this commit style: imperative mood"), true);
+});
+
+Deno.test("buildSystemPrompt adds hint and body when provided", () => {
+  const withBoth = buildSystemPrompt({ hint: "fixes #123", body: true });
+  assertEquals(
+    withBoth.includes("Additional context from the user. Reflect it in the message if relevant:\nfixes #123"),
+    true,
+  );
+  assertEquals(withBoth.includes('starting with "- "'), true);
+  const without = buildSystemPrompt({});
+  assertEquals(without.includes("fixes #123"), false);
+  assertEquals(without.includes('starting with "- "'), false);
 });
