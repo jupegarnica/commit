@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, useApp, useBoxMetrics, render } from "ink";
+import { Box, useApp, useBoxMetrics, render, type DOMElement } from "ink";
 import {
     Textarea,
     Form,
@@ -7,8 +7,6 @@ import {
     Input,
     Button,
     Div,
-    Html,
-    Body,
     useInkInput,
 } from "@garn/ink-html";
 
@@ -41,7 +39,7 @@ function useAutoGrowingTextareaRows(
     value: string,
     { minRows = DEFAULT_TEXTAREA_MIN_ROWS, maxRows = DEFAULT_TEXTAREA_MAX_ROWS } = {},
 ) {
-    const ref = React.useRef<any>(null);
+    const ref = React.useRef<DOMElement | null>(null);
     const { width, hasMeasured } = useBoxMetrics(ref);
     const measuredWidth = hasMeasured ? width : DEFAULT_TEXTAREA_WIDTH;
     const rows = clamp(countWrappedRows(value, measuredWidth), minRows, maxRows);
@@ -171,6 +169,7 @@ function TextareaPrompt({
                     id={inputId}
                     tabIndex={0}
                     hidden={false}
+                    // deno-lint-ignore jsx-no-children-prop -- required by @garn/ink-html types
                     children=""
                     rows={rows}
                     style={{
@@ -181,8 +180,8 @@ function TextareaPrompt({
                     autoFocus
                     placeholder={placeholder}
                     value={value}
-                    onChange={(e: any) => setValue(e.target.value)}
-                    onKeyDown={(e: any) => {
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             onSubmit(value);
                             exit();
@@ -263,6 +262,7 @@ function ConfirmCommitPrompt({
                     tabIndex={isSubmitting ? -1 : 0}
                     hidden={false}
                     autoFocus={false}
+                    // deno-lint-ignore jsx-no-children-prop -- required by @garn/ink-html types
                     children=""
                     rows={rows}
                     style={{
@@ -271,7 +271,7 @@ function ConfirmCommitPrompt({
                         borderRightStyle: "none",
                     }}
                     value={value}
-                    onChange={(e: any) => setValue(e.target.value)}
+                    onChange={(e) => setValue(e.target.value)}
                     onFocus={() => setIsTextareaFocused(true)}
                     onBlur={() => setIsTextareaFocused(false)}
                 ></Textarea>
@@ -347,6 +347,7 @@ function InputPrompt({
                 id={inputId}
                 tabIndex={0}
                 hidden={false}
+                // deno-lint-ignore jsx-no-children-prop -- required by @garn/ink-html types
                 children=""
                 style={{
                     flexGrow: 1,
@@ -357,8 +358,8 @@ function InputPrompt({
                 autoFocus
                 placeholder={placeholder}
                 value={value}
-                onChange={(e: any) => setValue(e.target.value)}
-                onKeyDown={(e: any) => {
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
                     if (e.key === "Enter") {
                         onSubmit(value);
                         exit();

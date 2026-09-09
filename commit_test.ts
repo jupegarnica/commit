@@ -1,10 +1,9 @@
-import { assertEquals } from "jsr:@std/assert@1.0.7";
+import { assertEquals } from "@std/assert";
 import {
   appendCoAuthor,
   buildRetryHint,
   buildSystemPrompt,
   collectExtraCommitArgs,
-  countWords,
   estimateTokens,
   extractTicketFromBranch,
   formatCommitMessageIssues,
@@ -17,7 +16,6 @@ import {
   maxWordsToTokens,
   resolveInteractiveMode,
   splitDiffIntoBoundedChunks,
-  splitDiffIntoChunks,
   validateCommitMessage,
   withTimeout,
 } from "./commit.ts";
@@ -305,7 +303,6 @@ Deno.test("validateCommitMessage detects missing conventional prefix", () => {
 });
 
 Deno.test("formatCommitMessageIssues renders human readable warnings", () => {
-  const subject = "x".repeat(80);
   const warning = formatCommitMessageIssues(
     validateCommitMessage("feat: " + "x".repeat(80)),
     "feat: " + "x".repeat(80),

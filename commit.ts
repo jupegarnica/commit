@@ -1,6 +1,6 @@
-import $ from "jsr:@david/dax@0.42.0";
-import * as colors from "jsr:/@std/fmt@1/colors";
-import { parseArgs } from "jsr:@std/cli@1.0.6";
+import $ from "@david/dax";
+import * as colors from "@std/fmt/colors";
+import { parseArgs } from "@std/cli";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
 import { confirmCommit } from "./ui/prompt.tsx";
@@ -79,12 +79,17 @@ function buildKnownSets(flags: FlagDef[]): {
   return { booleanLong, stringLong, booleanShort, stringShort };
 }
 
-export const {
-  booleanLong: KNOWN_BOOLEAN_LONG,
-  stringLong: KNOWN_STRING_LONG,
-  booleanShort: KNOWN_BOOLEAN_SHORT,
-  stringShort: KNOWN_STRING_SHORT,
+const knownSets: {
+  booleanLong: Set<string>;
+  stringLong: Set<string>;
+  booleanShort: Set<string>;
+  stringShort: Set<string>;
 } = buildKnownSets(CLI_FLAGS);
+
+export const KNOWN_BOOLEAN_LONG = knownSets.booleanLong;
+export const KNOWN_STRING_LONG = knownSets.stringLong;
+export const KNOWN_BOOLEAN_SHORT = knownSets.booleanShort;
+export const KNOWN_STRING_SHORT = knownSets.stringShort;
 
 export function buildParseArgsOptions(flags: FlagDef[]): {
   boolean: string[];
@@ -535,9 +540,9 @@ async function commit(): Promise<void> {
 
   const providerConfig = configSaved.providers[providerName] || {};
 
-  let model = args.model || providerConfig.model || provider.defaultModel;
+  const model = args.model || providerConfig.model || provider.defaultModel;
 
-  let baseURL: string | undefined = args["base-URL"] ||
+  const baseURL: string | undefined = args["base-URL"] ||
     (provider.baseURLEnvVar
       ? Deno.env.get(provider.baseURLEnvVar)
       : undefined) ||
@@ -1248,7 +1253,7 @@ async function generateCommitMessageFromLargeDiff(opts: {
   startSpinner("Generating commit message from summaries...");
   const combined = summaries.join("\n");
   try {
-    let commitMessage = await askLLM({
+    const commitMessage = await askLLM({
       model,
       apiKey,
       baseURL,

@@ -1,4 +1,4 @@
-import * as colors from "jsr:/@std/fmt@1/colors";
+import * as colors from "@std/fmt/colors";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL_MS = 80;
