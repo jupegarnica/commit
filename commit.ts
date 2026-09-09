@@ -33,6 +33,8 @@ const KNOWN_STRING_LONG = new Set([
   "commits-to-learn",
   "unified",
   "provider",
+  "co-author",
+  "co-author-email",
 ]);
 const KNOWN_BOOLEAN_SHORT = new Set([
   "A",
@@ -146,6 +148,34 @@ export function hasNoVerifyFlag(extraCommitArgs: string[]): boolean {
   });
 }
 
+export function appendCoAuthor(
+  message: string,
+  pattern: string,
+  values: { model: string; email?: string },
+): string {
+  const trimmedPattern = pattern.trim();
+  if (!trimmedPattern) {
+    return message;
+  }
+  let signature = trimmedPattern;
+  if (signature.includes("{model}")) {
+    if (!values.model) {
+      return message;
+    }
+    signature = signature.replaceAll("{model}", values.model);
+  }
+  if (signature.includes("{email}")) {
+    if (!values.email) {
+      return message;
+    }
+    signature = signature.replaceAll("{email}", values.email);
+  }
+  if (message.includes(signature)) {
+    return message;
+  }
+  return `${message}\n\n${signature}`;
+}
+
 async function getPreCommitHookPath(): Promise<string | null> {
   const hookPath = (
     await daxSilent`git rev-parse --git-path hooks/pre-commit`
@@ -179,10 +209,12 @@ async function runCommand(command: string, args: string[]) {
 
 export async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
-  const argsToParse =
-    passthroughIndex === -1 ? Deno.args : Deno.args.slice(0, passthroughIndex);
-  const passthroughArgs =
-    passthroughIndex === -1 ? [] : Deno.args.slice(passthroughIndex + 1);
+  const argsToParse = passthroughIndex === -1
+    ? Deno.args
+    : Deno.args.slice(0, passthroughIndex);
+  const passthroughArgs = passthroughIndex === -1
+    ? []
+    : Deno.args.slice(passthroughIndex + 1);
 
   const args = parseArgs(argsToParse, {
     boolean: [
@@ -204,6 +236,8 @@ export async function commit(): Promise<void> {
       "commits-to-learn",
       "unified",
       "provider",
+      "co-author",
+      "co-author-email",
     ],
     alias: {
       add: "A",
@@ -234,12 +268,13 @@ export async function commit(): Promise<void> {
   "unified": 10,
   "debug": false,
   "provider": "openai",
+  "co-author": "",
   "providers": {
-    "openai": { "api-key": "", "model": "", "base-URL": "" },
-    "google": { "api-key": "", "model": "", "base-URL": "" },
-    "anthropic": { "api-key": "", "model": "", "base-URL": "" },
-    "ollama": { "api-key": "", "model": "", "base-URL": "" },
-    "ollama-cloud": { "api-key": "", "model": "", "base-URL": "" }
+    "openai": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
+    "google": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
+    "anthropic": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
+    "ollama": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
+    "ollama-cloud": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" }
   }
   }`;
   const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
@@ -280,8 +315,7 @@ export async function commit(): Promise<void> {
 
   let model = args.model || providerConfig.model || provider.defaultModel;
 
-  let baseURL: string | undefined =
-    args["base-URL"] ||
+  let baseURL: string | undefined = args["base-URL"] ||
     (provider.baseURLEnvVar
       ? Deno.env.get(provider.baseURLEnvVar)
       : undefined) ||
@@ -309,6 +343,8 @@ Use -- to pass options that may conflict with this CLI.
 -K, --api-key <apiKey>: Specifies the API key. Overrides the provider's env var (OPENAI_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_API_KEY).
 -B, --base-URL <baseURL>: Specifies a custom base URL for the provider API. For ollama, can also be set via OLLAMA_BASE_URL env var.
 -W, --max-words <maxWords>: Specifies the maximum number of words to call the api. The default is 10000.
+--co-author <pattern>: Appends a signature to the commit message. Placeholders: {model} (resolved model id), {email} (co-author email for the provider, prompted and saved on first use). Example: "Co-Authored-By: {model} <{email}>". Leave empty in --config to disable.
+--co-author-email <email>: Overrides the co-author email for this run (resolves the {email} placeholder). Overrides the saved provider config.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -332,18 +368,17 @@ Use -- to pass options that may conflict with this CLI.
     console.info(version);
     return;
   }
-  const apiKey =
-    args["api-key"] ||
+  const apiKey = args["api-key"] ||
     providerConfig["api-key"] ||
     (provider.envVar ? Deno.env.get(provider.envVar) : undefined);
 
   const readApiKeyFrom = args["api-key"]
     ? "--api-key CLI argument"
     : providerConfig["api-key"]
-      ? "saved config"
-      : provider.envVar
-        ? `env var ${provider.envVar}`
-        : "(no API)";
+    ? "saved config"
+    : provider.envVar
+    ? `env var ${provider.envVar}`
+    : "(no API)";
 
   if (args.config) {
     const defaultConfig = JSON.parse(DEFAULTS);
@@ -375,10 +410,11 @@ Use -- to pass options that may conflict with this CLI.
       "api-key": "",
       model: "",
       "base-URL": "",
+      "co-author-email": "",
     };
 
-    const providerDefaultModel =
-      PROVIDERS[selectedProvider]?.defaultModel || "";
+    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel ||
+      "";
     const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
 
     const selectedProviderConfig = PROVIDERS[selectedProvider];
@@ -387,15 +423,32 @@ Use -- to pass options that may conflict with this CLI.
     const providerBaseURLEnvVar = selectedProviderConfig?.baseURLEnvVar || "";
     const providerDefaultBaseURL = selectedProviderConfig?.baseURL || "";
 
+    const coAuthorPattern = await prompt(
+      "Enter co-author pattern (use {model} and {email} placeholders, leave empty to disable)",
+      {
+        default: configSaved["co-author"] || "",
+      },
+    );
+    const coAuthorEmail = await prompt(
+      `Enter co-author email for ${selectedProvider} (used by the {email} placeholder, leave empty to disable)`,
+      {
+        default: providerConfigToEdit["co-author-email"] || "",
+      },
+    );
+
     const newProviderConfig = {
       "api-key": requiresApiKey
         ? await prompt(
-            `Enter API key for ${selectedProvider}${providerEnvVar ? ` or leave empty to read from ${providerEnvVar}` : ""}`,
-            {
-              default: providerConfigToEdit["api-key"],
-              mask: true,
-            },
-          )
+          `Enter API key for ${selectedProvider}${
+            providerEnvVar
+              ? ` or leave empty to read from ${providerEnvVar}`
+              : ""
+          }`,
+          {
+            default: providerConfigToEdit["api-key"],
+            mask: true,
+          },
+        )
         : providerConfigToEdit["api-key"],
       model: await prompt(
         `Enter model for ${selectedProvider} (leave empty to use provider default, currently: ${providerDefaultModel})`,
@@ -405,13 +458,17 @@ Use -- to pass options that may conflict with this CLI.
       ),
       "base-URL": requiresBaseUrl
         ? await prompt(
-            `Enter base URL for ${selectedProvider}${providerBaseURLEnvVar ? ` or leave empty to read from ${providerBaseURLEnvVar}` : ""}`,
-            {
-              default:
-                providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
-            },
-          )
+          `Enter base URL for ${selectedProvider}${
+            providerBaseURLEnvVar
+              ? ` or leave empty to read from ${providerBaseURLEnvVar}`
+              : ""
+          }`,
+          {
+            default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
+          },
+        )
         : providerConfigToEdit["base-URL"],
+      "co-author-email": coAuthorEmail,
     };
 
     const newConfig = {
@@ -431,7 +488,8 @@ Use -- to pass options that may conflict with this CLI.
       ),
       debug:
         (await prompt("Enter debug", { default: configSaved["debug"] })) ===
-        "true",
+          "true",
+      "co-author": coAuthorPattern,
       providers: {
         ...configSaved.providers,
         [selectedProvider]: newProviderConfig,
@@ -461,6 +519,27 @@ Use -- to pass options that may conflict with this CLI.
     );
   }
 
+  const coAuthorPattern = args["co-author"] || configSaved["co-author"] || "";
+  let coAuthorEmail = args["co-author-email"] ||
+    providerConfig["co-author-email"] || "";
+  if (
+    coAuthorPattern.trim() && coAuthorPattern.includes("{email}") &&
+    !coAuthorEmail
+  ) {
+    coAuthorEmail = await prompt(
+      `Enter co-author email for ${providerName} (leave empty to skip signature)`,
+      { default: `noreply@${providerName}.com` },
+    );
+    if (coAuthorEmail) {
+      configSaved.providers[providerName] = {
+        ...providerConfig,
+        "co-author-email": coAuthorEmail,
+      };
+      localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+      console.info("Co-author email saved.");
+    }
+  }
+
   if (args.add) {
     await $`git add .`;
   }
@@ -474,7 +553,9 @@ Use -- to pass options that may conflict with this CLI.
   }
   console.info(
     colors.gray(
-      `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${colors.blue(model)}, API key source: ${colors.blue(readApiKeyFrom)}`,
+      `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${
+        colors.blue(model)
+      }, API key source: ${colors.blue(readApiKeyFrom)}`,
     ),
   );
   debug &&
@@ -536,13 +617,13 @@ Use -- to pass options that may conflict with this CLI.
     Only include the commit message, do not include anything else, just the commit message without any quotes or backticks.
     `;
   if (commits) {
-    systemContent += `\nYou should follow the commit style of these commits:\n${commits}`;
+    systemContent +=
+      `\nYou should follow the commit style of these commits:\n${commits}`;
   }
 
   let commitMessage = "";
-  const stagedDiffStat = (
-    await daxSilent`git diff --color=always --stat --staged -- . ':(exclude)*.lock'`
-  );
+  const stagedDiffStat =
+    await daxSilent`git diff --color=always --stat --staged -- . ':(exclude)*.lock'`;
   let hasShownStagedDiffStat = false;
 
   while (true) {
@@ -561,6 +642,11 @@ Use -- to pass options that may conflict with this CLI.
       Deno.exit(1);
     }
 
+    commitMessage = appendCoAuthor(commitMessage, coAuthorPattern, {
+      model,
+      email: coAuthorEmail,
+    });
+
     if (args["no-commit"]) {
       console.info(commitMessage);
       return;
@@ -571,7 +657,7 @@ Use -- to pass options that may conflict with this CLI.
     }
 
     if (stagedDiffStat && !hasShownStagedDiffStat) {
-      console.info((stagedDiffStat));
+      console.info(stagedDiffStat);
       hasShownStagedDiffStat = true;
     }
 
