@@ -50,6 +50,7 @@ export const CLI_FLAGS: FlagDef[] = [
   { name: "commit-style", type: "string" },
   { name: "hint", type: "string" },
   { name: "body", type: "boolean" },
+  { name: "dry-run", type: "boolean" },
 ];
 
 // parseArgs treats extra aliases as booleans, so single-char aliases of
@@ -512,7 +513,16 @@ async function commit(): Promise<void> {
   const debug = args.debug || configSaved.debug;
 
   const isTTY = Deno.stdin.isTerminal();
-  const mode = resolveInteractiveMode(isTTY, args);
+  const noCommitFlag = args["no-commit"] || (args as Record<string, unknown>)["dry-run"] === true;
+  const mode = resolveInteractiveMode(isTTY, {
+    "skip-edit": args["skip-edit"],
+    "no-commit": noCommitFlag,
+  });
+  if (noCommitFlag) {
+    console.info(
+      colors.gray("ℹ️  Dry run: commit message will be printed, not committed."),
+    );
+  }
   if (!mode.interactive) {
     console.warn(
       colors.yellow(
@@ -552,7 +562,7 @@ Use -- to pass options that may conflict with this CLI.
 -E, --amend: Runs git commit --amend instead of git commit.
 -L, --commits-to-learn: default is 10. Number of commits to learn from.
 -S, -Y, -y, --skip-edit: Skips the interactive preview and the editing of the commit message before creating the commit.
--N, --no-commit: Skips the creation of the commit. Just prints the commit message.
+-N, --no-commit, --dry-run: Skips the creation of the commit. Just prints the commit message.
 -M, --model <model>: Specifies the model to use. Defaults to the provider's default model.
 -U, --unified <lines>: Specifies the number of lines of context to show in the diff. The default is 10.
 -C, --config: Prompts for the default options and saves them.

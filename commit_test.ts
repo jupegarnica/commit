@@ -227,7 +227,7 @@ Deno.test("buildKnownSets derives expected flag sets from CLI_FLAGS", () => {
   assertEquals(KNOWN_BOOLEAN_SHORT.has("A"), true);
   assertEquals(KNOWN_STRING_SHORT.has("K"), true);
   assertEquals(KNOWN_BOOLEAN_SHORT.has("Y"), true);
-  assertEquals(KNOWN_BOOLEAN_LONG.size, 10);
+  assertEquals(KNOWN_BOOLEAN_LONG.size, 11);
   assertEquals(KNOWN_STRING_LONG.size, 12);
   assertEquals(KNOWN_BOOLEAN_SHORT.size, 11);
   assertEquals(KNOWN_STRING_SHORT.size, 7);
@@ -379,4 +379,11 @@ Deno.test("buildSystemPrompt includes previous attempt for feedback", () => {
   assertEquals(prompt.includes("feat: some long message"), true);
   assertEquals(prompt.includes("shorter"), true);
   assertEquals(buildSystemPrompt({}).includes("Previous attempt"), false);
+});
+
+Deno.test("collectExtraCommitArgs ignores --dry-run alias", () => {
+  const args = ["--dry-run", "--no-verify"];
+  assertEquals(collectExtraCommitArgs(args), ["--no-verify"]);
+  const allKnown = ["--dry-run", "--no-commit", "--add"];
+  assertEquals(collectExtraCommitArgs(allKnown), []);
 });
