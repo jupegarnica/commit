@@ -932,6 +932,10 @@ Use -- to pass options that may conflict with this CLI.
     }
 
     if (mode.skipEdit) {
+      if (stagedDiffStat && !hasShownStagedDiffStat) {
+        console.info(stagedDiffStat);
+        hasShownStagedDiffStat = true;
+      }
       break;
     }
 
