@@ -17,6 +17,7 @@ function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, value));
 }
 
+
 function countWrappedRows(value: string, width: number) {
     const safeWidth = Math.max(1, width);
     const lines = value.length > 0 ? value.split("\n") : [""];
@@ -54,16 +55,9 @@ async function renderPrompt<T>(node: React.ReactElement, fallbackValue: T, resul
 
 async function renderCommittedPrompt<T>(node: React.ReactElement, result: { value: T }) {
     const { waitUntilExit, clear } = render(node);
-    const code = await waitUntilExit();
+    await waitUntilExit();
     clear();
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (code !== 0) {
-        // Aborted (e.g. Ctrl+C): treat as explicit cancel, mirroring renderPrompt.
-        const cancelled = { ...result.value, action: "cancel" as const };
-        result.value = cancelled;
-        return result.value;
-    }
 
     return result.value;
 }
