@@ -329,9 +329,6 @@ function InputPrompt({
     placeholder: string;
     onSubmit: (value: string) => void;
     defaultValue: string;
-
-
-
     type?: "input" | "password";
 }) {
     const { exit } = useApp();

@@ -1025,10 +1025,6 @@ Use -- to pass options that may conflict with this CLI.
   }
 }
 
-if (import.meta.main) {
-  await commit();
-}
-
 async function prompt(
   message: string,
   options: { default?: string; mask?: boolean; noClear?: boolean } = {},
@@ -1289,4 +1285,8 @@ async function generateCommitMessageFromLargeDiff(opts: {
   } finally {
     stopSpinner();
   }
+}
+
+if (import.meta.main) {
+  await commit();
 }
