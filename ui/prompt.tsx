@@ -180,8 +180,8 @@ function TextareaPrompt({
                     autoFocus
                     placeholder={placeholder}
                     value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
+                    onChange={(e: any) => setValue(e.target.value)}
+                    onKeyDown={(e: any) => {
                         if (e.key === "Enter") {
                             onSubmit(value);
                             exit();
@@ -271,7 +271,7 @@ function ConfirmCommitPrompt({
                         borderRightStyle: "none",
                     }}
                     value={value}
-                    onChange={(e) => setValue(e.target.value)}
+                    onChange={(e: any) => setValue(e.target.value)}
                     onFocus={() => setIsTextareaFocused(true)}
                     onBlur={() => setIsTextareaFocused(false)}
                 ></Textarea>
@@ -358,8 +358,8 @@ function InputPrompt({
                 autoFocus
                 placeholder={placeholder}
                 value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => {
+                onChange={(e: any) => setValue(e.target.value)}
+                onKeyDown={(e: any) => {
                     if (e.key === "Enter") {
                         onSubmit(value);
                         exit();
