@@ -6,7 +6,6 @@ import {
   collectExtraCommitArgs,
   estimateTokens,
   extractTicketFromBranch,
-  formatCommitMessageIssues,
   hasNoVerifyFlag,
   isTransientLLMError,
   KNOWN_BOOLEAN_LONG,
@@ -15,9 +14,12 @@ import {
   KNOWN_STRING_SHORT,
   maxWordsToTokens,
   resolveInteractiveMode,
-  validateCommitMessage,
   withTimeout,
 } from "./commit.ts";
+import {
+  formatCommitMessageIssues,
+  validateCommitMessage,
+} from "./validate.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
   const args = ["--add", "--push", "--no-verify"];

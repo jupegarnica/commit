@@ -1,5 +1,9 @@
 import React from "react";
-import { Box, useApp, useBoxMetrics, render, type DOMElement } from "ink";
+import { Box, useApp, useBoxMetrics, render, Text, type DOMElement } from "ink";
+import {
+    formatCommitMessageIssues,
+    validateCommitMessage,
+} from "../validate.ts";
 import {
     Textarea,
     Form,
@@ -313,6 +317,24 @@ function ConfirmCommitPrompt({
                     </Button>
                 </Div>
             )}
+            {!isSubmitting && (() => {
+                const issueWarning = formatCommitMessageIssues(
+                    validateCommitMessage(value),
+                    value.split("\n", 1)[0] || "",
+                );
+                if (!issueWarning) return null;
+                return (
+                    <Div
+                        id={`${inputId}-issues`}
+                        tabIndex={-1}
+                        hidden={false}
+                        autoFocus={false}
+                        style={{ flexDirection: "column", gap: 0 }}
+                    >
+                        <Text color="yellow">{issueWarning}</Text>
+                    </Div>
+                );
+            })()}
         </Form>
     );
 }
