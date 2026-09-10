@@ -318,11 +318,10 @@ function ConfirmCommitPrompt({
                 </Div>
             )}
             {!isSubmitting && (() => {
-                const issueWarning = formatCommitMessageIssues(
-                    validateCommitMessage(value),
-                    value.split("\n", 1)[0] || "",
-                );
-                if (!issueWarning) return null;
+                const subject = value.split("\n", 1)[0] || "";
+                const issues = validateCommitMessage(value);
+                const issueWarning = formatCommitMessageIssues(issues, subject);
+                const counter = `subject length: ${subject.length}/72`;
                 return (
                     <Div
                         id={`${inputId}-issues`}
@@ -331,7 +330,9 @@ function ConfirmCommitPrompt({
                         autoFocus={false}
                         style={{ flexDirection: "column", gap: 0 }}
                     >
-                        <Text color="yellow">{issueWarning}</Text>
+                        <Text color={issues.tooLong ? "yellow" : "gray"}>
+                            {issueWarning ? `${issueWarning} · ` : ""}{counter}
+                        </Text>
                     </Div>
                 );
             })()}
