@@ -897,15 +897,6 @@ Use -- to pass options that may conflict with this CLI.
       email: coAuthorEmail,
     });
 
-    const issues = validateCommitMessage(commitMessage);
-    const issueWarning = formatCommitMessageIssues(
-      issues,
-      commitMessage.split("\n", 1)[0],
-    );
-    if (issueWarning) {
-      console.warn(colors.yellow(issueWarning));
-    }
-
     if (mode.noCommit) {
       console.info(commitMessage);
       return;
