@@ -240,6 +240,15 @@ function ConfirmCommitPrompt({
     };
 
     useInkInput(
+        (input) => {
+            if (input === "c" || input === "C") {
+                submit("commit");
+            }
+        },
+        { isActive: !isSubmitting && !isTextareaFocused },
+    );
+
+    useInkInput(
         (_input, key) => {
             if (key.escape) {
                 submit("cancel");
@@ -295,7 +304,7 @@ function ConfirmCommitPrompt({
                         hidden={false}
                         onClick={() => submit("commit")}
                     >
-                        Commit (enter)
+                        Commit (c)
                     </Button>
                     <Button
                         id={`${inputId}-regenerate`}
