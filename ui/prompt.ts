@@ -349,7 +349,7 @@ export async function confirmCommit({
                 }
                 const counter = document.createElement("span");
                 if (issues.tooLong) {
-                    counter.textContent = "⚠️ subject length: ";
+                    counter.textContent = "⚠️  subject length: ";
                     const count = document.createElement("span");
                     count.className = "prompt-issue-count over-limit";
                     count.textContent = `${subject.length}/72`;
