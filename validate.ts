@@ -18,12 +18,8 @@ export function validateCommitMessage(message: string): CommitMessageIssues {
 
 export function formatCommitMessageIssues(
   issues: CommitMessageIssues,
-  subject: string,
 ): string | null {
   const warnings: string[] = [];
-  if (issues.tooLong) {
-    warnings.push(`subject is ${subject.length} chars (> 72)`);
-  }
   if (issues.missingPrefix) {
     warnings.push("missing conventional prefix (feat/fix/refactor/...)");
   }

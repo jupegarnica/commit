@@ -91,6 +91,7 @@ const STYLES = `
     }
     .prompt-issues { color: #808080; margin-top: 1px; }
     .prompt-issues.warning { color: #ffd75f; }
+    .prompt-issue-count.over-limit { color: #ffd75f; }
 `;
 
 function clamp(value: number, min: number, max: number) {
@@ -339,12 +340,24 @@ export async function confirmCommit({
             const refreshIssues = () => {
                 const subject = textarea.value.split("\n", 1)[0] || "";
                 const issues = validateCommitMessage(textarea.value);
-                const issueWarning = formatCommitMessageIssues(issues, subject);
-                const counter = `subject length: ${subject.length}/72`;
-                issuesNode.textContent = `${
-                    issueWarning ? `${issueWarning} · ` : ""
-                }${counter}`;
-                issuesNode.classList.toggle("warning", issues.tooLong);
+                const issueWarning = formatCommitMessageIssues(issues);
+                issuesNode.textContent = "";
+                if (issueWarning) {
+                    const warning = document.createElement("span");
+                    warning.textContent = `${issueWarning} · `;
+                    issuesNode.appendChild(warning);
+                }
+                const counter = document.createElement("span");
+                if (issues.tooLong) {
+                    counter.textContent = "⚠️ subject length: ";
+                    const count = document.createElement("span");
+                    count.className = "prompt-issue-count over-limit";
+                    count.textContent = `${subject.length}/72`;
+                    counter.appendChild(count);
+                } else {
+                    counter.textContent = `subject length: ${subject.length}/72`;
+                }
+                issuesNode.appendChild(counter);
             };
 
             textarea.addEventListener("input", refreshIssues);
