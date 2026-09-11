@@ -443,6 +443,7 @@ async function commit(): Promise<void> {
   "co-author": "",
   "commit-language": "",
   "commit-style": "",
+  "hint": "",
   "providers": {
     "openai": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
     "google": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
@@ -540,7 +541,7 @@ Use -- to pass options that may conflict with this CLI.
 --co-author-email <email>: Overrides the co-author email for this run (resolves the {email} placeholder). Overrides the saved provider config.
 --commit-language <lang>: Language for the commit message (e.g. "Spanish"). Overrides the saved config.
 --commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Overrides the saved config.
---hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123").
+--hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123"). Overrides the saved config (set it with --config).
 --body: Also generate a body with bullet points after the subject line.
 -D, --debug: Enables debug mode, which will print additional information to the console.
 -H, --help: Prints the help message.
@@ -697,6 +698,10 @@ Use -- to pass options that may conflict with this CLI.
       "commit-style": await prompt(
         "Enter commit style (e.g. 'imperative mood, max 72 chars'; leave empty for default)",
         { default: configSaved["commit-style"] || "" },
+      ),
+      hint: await prompt(
+        "Enter default hint (extra context for the message, e.g. 'make a concise subject, and add long body with bullets'; leave empty for none)",
+        { default: configSaved["hint"] || "" },
       ),
       providers: {
         ...configSaved.providers,
@@ -860,7 +865,7 @@ Use -- to pass options that may conflict with this CLI.
     ticket,
     language: commitLanguage,
     style: commitStyle,
-    hint: args.hint,
+    hint: args.hint || configSaved["hint"] || "",
     body: args.body,
   });
 

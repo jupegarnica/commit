@@ -59,6 +59,10 @@ commit [OPTIONS]
 - `--co-author-email <email>`: Overrides the co-author email for this run
   (resolves the `{email}` placeholder). Takes precedence over the saved provider
   `co-author-email` config and skips the first-use prompt.
+- `--hint <text>`: Additional context to guide the commit message generation
+  (e.g. `"fixes #123"` or `"make a concise subject, and add long body with
+  bullets"`). Overrides the saved config value; can be persisted with
+  `--config`.
 - `--base-URL <baseURL>`: Specifies a custom base URL for the provider API.
   Overrides the provider's default. For `ollama`, can also be set via
   `OLLAMA_BASE_URL`. Required for the `ollama` provider if not already saved.
