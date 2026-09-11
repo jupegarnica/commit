@@ -3,7 +3,7 @@ import * as colors from "@std/fmt/colors";
 import { parseArgs } from "@std/cli";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
-import { confirm, confirmCommit, prompt, select } from "./ui/prompt.tsx";
+import { confirm, confirmCommit, prompt, select } from "./ui/prompt.ts";
 import { startSpinner, stopSpinner } from "./spinner.ts";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
