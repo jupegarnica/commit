@@ -16,15 +16,13 @@
   "license": "MIT",
   "imports": {
     "@anthropic-ai/sdk": "npm:@anthropic-ai/sdk@0.80.0",
+    "@b9g/termdom": "npm:@b9g/termdom@^0.1.6",
     "@david/dax": "jsr:@david/dax@0.42.0",
-    "@garn/ink-html": "jsr:@garn/ink-html@^0.0.4",
     "@google/genai": "npm:@google/genai@1.47.0",
     "@std/assert": "jsr:@std/assert@1.0.7",
     "@std/cli": "jsr:@std/cli@1.0.6",
     "@std/fmt": "jsr:@std/fmt@1",
-    "ink": "npm:ink@^7.0.0",
     "ollama": "npm:ollama@0.6.3",
-    "openai": "npm:openai@4.38.3",
-    "react": "npm:react@^19.2.4"
+    "openai": "npm:openai@4.38.3"
   }
 }

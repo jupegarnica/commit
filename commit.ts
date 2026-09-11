@@ -3,7 +3,7 @@ import * as colors from "@std/fmt/colors";
 import { parseArgs } from "@std/cli";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
-import { confirm, confirmCommit, prompt, select } from "./ui/prompt.tsx";
+import { confirm, confirmCommit, prompt, select } from "./ui/prompt.ts";
 import { startSpinner, stopSpinner } from "./spinner.ts";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
@@ -417,6 +417,9 @@ export type CommitConfig = {
   "commit-language": string;
   "commit-style": string;
   hint: string;
+  "show-commit-language": boolean;
+  "show-commit-style": boolean;
+  "show-provider": boolean;
   providers: Record<string, ProviderSettings>;
 };
 
@@ -443,6 +446,9 @@ export function defaultConfig(): CommitConfig {
     "commit-language": "",
     "commit-style": DEFAULT_COMMIT_STYLE,
     hint: "",
+    "show-commit-language": false,
+    "show-commit-style": false,
+    "show-provider": true,
     providers,
   };
 }
@@ -713,6 +719,27 @@ async function editCoAuthorSection(
   };
 }
 
+async function editDisplaySection(
+  config: CommitConfig,
+): Promise<CommitConfig> {
+  const next = { ...config };
+
+  next["show-provider"] = await confirm({
+    question: "Show the 'Using provider' info line?",
+    defaultValue: config["show-provider"],
+  });
+  next["show-commit-language"] = await confirm({
+    question: "Show the 'Commit language' info line?",
+    defaultValue: config["show-commit-language"],
+  });
+  next["show-commit-style"] = await confirm({
+    question: "Show the 'Commit style' info line?",
+    defaultValue: config["show-commit-style"],
+  });
+
+  return next;
+}
+
 export async function runConfigEditor(
   initial: CommitConfig,
 ): Promise<ConfigEditorResult> {
@@ -729,6 +756,11 @@ export async function runConfigEditor(
         config.hint ? "set" : "none"
       }`,
       `Co-author       ${config["co-author"] || "disabled"}`,
+      `Display         provider ${
+        config["show-provider"] ? "on" : "off"
+      } · language ${config["show-commit-language"] ? "on" : "off"} · style ${
+        config["show-commit-style"] ? "on" : "off"
+      }`,
       `Debug           ${config.debug ? "on" : "off"}`,
       "Save and exit",
       "Reset to defaults",
@@ -737,7 +769,7 @@ export async function runConfigEditor(
     const choice = await select({
       question: "Commit configuration:",
       options: menu,
-      initialIndex: 4,
+      initialIndex: 5,
     });
     if (choice < 0) {
       return { action: "cancel" };
@@ -754,11 +786,14 @@ export async function runConfigEditor(
         config = await editCoAuthorSection(config);
         break;
       case 3:
-        config = { ...config, debug: !config.debug };
+        config = await editDisplaySection(config);
         break;
       case 4:
+        config = { ...config, debug: !config.debug };
+        break;
+      case 5:
         return { action: "save", config };
-      case 5: {
+      case 6: {
         const confirmed = await confirm({
           question: "Reset all settings to defaults? This cannot be undone.",
           defaultValue: false,
@@ -798,6 +833,9 @@ export function diffConfig(
     "commit-language",
     "commit-style",
     "hint",
+    "show-commit-language",
+    "show-commit-style",
+    "show-provider",
   ];
   for (const key of topKeys) {
     const beforeValue = before[key];
@@ -1086,13 +1124,15 @@ Use -- to pass options that may conflict with this CLI.
       await runCommand("git", ["hook", "run", "pre-commit"]);
     }
   }
-  console.info(
-    colors.gray(
-      `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${
-        colors.blue(model)
-      }, API key source: ${colors.blue(readApiKeyFrom)}`,
-    ),
-  );
+  if (configSaved["show-provider"]) {
+    console.info(
+      colors.gray(
+        `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${
+          colors.blue(model)
+        }, API key source: ${colors.blue(readApiKeyFrom)}`,
+      ),
+    );
+  }
   debug &&
     console.debug({ args, providerName, model, baseURL, extraCommitArgs });
   debug && console.time("git diff");
@@ -1155,12 +1195,14 @@ Use -- to pass options that may conflict with this CLI.
   const commitStyle = args["commit-style"] ||
     configSaved["commit-style"] ||
     DEFAULT_COMMIT_STYLE;
-  if (commitLanguage) {
+  if (commitLanguage && configSaved["show-commit-language"]) {
     console.info(
       colors.gray(`ℹ️  Commit language: ${colors.blue(commitLanguage)}`),
     );
   }
-  if (commitStyle !== DEFAULT_COMMIT_STYLE) {
+  if (
+    commitStyle !== DEFAULT_COMMIT_STYLE && configSaved["show-commit-style"]
+  ) {
     console.info(colors.gray(`ℹ️  Commit style: ${colors.blue(commitStyle)}`));
   }
   const systemContent = buildSystemPrompt({

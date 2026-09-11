@@ -306,11 +306,12 @@ Deno.test("validateCommitMessage detects missing conventional prefix", () => {
 
 Deno.test("formatCommitMessageIssues renders human readable warnings", () => {
   const warning = formatCommitMessageIssues(
-    validateCommitMessage("feat: " + "x".repeat(80)),
-    "feat: " + "x".repeat(80),
+    validateCommitMessage("x".repeat(80) + "."),
   );
-  assertEquals(warning?.includes("chars (> 72)"), true);
-  assertEquals(formatCommitMessageIssues(validateCommitMessage("feat: ok"), "feat: ok"), null);
+  assertEquals(warning?.includes("missing conventional prefix"), true);
+  assertEquals(warning?.includes("subject ends with a period"), true);
+  assertEquals(warning?.includes("223"), false);
+  assertEquals(formatCommitMessageIssues(validateCommitMessage("feat: ok")), null);
 });
 
 Deno.test("estimateTokens uses 4 chars per token ceiling", () => {
