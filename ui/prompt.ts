@@ -13,23 +13,84 @@ type ConfirmCommitResult = {
 
 const DEFAULT_TEXTAREA_MIN_ROWS = 1;
 const DEFAULT_TEXTAREA_MAX_ROWS = 12;
+// The bordered field adds 1 cell per side for the border and 1ch per side for
+// the padding, so the text wraps 4 cells before the terminal width.
+const FIELD_CHROME_WIDTH = 4;
 
 const STYLES = `
-    .prompt { display: flex; flex-direction: column; }
-    .prompt-label { color: #5fafff; }
-    .prompt-row { display: flex; flex-direction: row; gap: 1ch; }
-    .prompt-error { color: #ff5f5f; }
-    .prompt-hint { color: #808080; }
-    .prompt-option { color: #ffffff; }
-    .prompt-option.selected { color: #00d7ff; }
-    .prompt-actions { display: flex; flex-direction: row; gap: 1ch; }
-    .prompt-issues { color: #808080; }
-    .prompt-issues.warning { color: #ffd75f; }
-    input, textarea {
+    .prompt { display: flex; flex-direction: column; gap: 0; }
+    .prompt-label {
+        color: #5fafff;
+        font-weight: bold;
+        margin-bottom: 1px;
+    }
+    .prompt-field {
+        border: 1px solid #333333;
+        border-radius: 1px;
+        padding: 0 1ch;
+    }
+    .prompt-field:focus-within { border-color: #5fafff; }
+    .prompt-field > input,
+    .prompt-field > textarea {
         border: none;
+        outline: none;
         padding: 0;
+        width: 100%;
         flex-grow: 1;
     }
+    .prompt-field > input:focus,
+    .prompt-field > textarea:focus { text-decoration: none; }
+    .prompt-field > textarea { white-space: pre-wrap; }
+    .prompt-error { color: #ff5f5f; }
+    .prompt-hint { color: #808080; margin-top: 1px; }
+    .prompt-actions .prompt-hint { margin-top: 0; }
+    .prompt-list {
+        border: 1px solid #333333;
+        border-radius: 1px;
+        padding: 0 1ch;
+        display: flex;
+        flex-direction: column;
+    }
+    .prompt-option { color: #999999; }
+    .prompt-option.selected {
+        background-color: #1c2b3a;
+        color: #00d7ff;
+        font-weight: bold;
+    }
+    .prompt-actions { display: flex; flex-direction: row; gap: 1ch; margin-top: 1px; }
+    .prompt-chip {
+        border: 1px solid #333333;
+        border-radius: 1px;
+        padding: 0 1ch;
+        color: #999999;
+    }
+    .prompt-chip.selected {
+        border-color: #00d7ff;
+        color: #00d7ff;
+        font-weight: bold;
+    }
+    button {
+        border: 1px solid #333333;
+        border-radius: 1px;
+        padding: 0 1ch;
+        color: #bbbbbb;
+        background-color: transparent;
+        outline: none;
+    }
+    button::before,
+    button::after { content: none; }
+    button.primary {
+        border-color: #5fafff;
+        color: #5fafff;
+        font-weight: bold;
+    }
+    button:focus {
+        border-color: #00d7ff;
+        color: #00d7ff;
+        text-decoration: none;
+    }
+    .prompt-issues { color: #808080; margin-top: 1px; }
+    .prompt-issues.warning { color: #ffd75f; }
 `;
 
 function clamp(value: number, min: number, max: number) {
@@ -44,6 +105,29 @@ function countWrappedRows(value: string, width: number) {
         const lineLength = Math.max(1, line.length);
         return total + Math.ceil(lineLength / safeWidth);
     }, 0);
+}
+
+function fieldContentWidth(window: TermDOM["window"]) {
+    return Math.max(1, window.innerWidth - FIELD_CHROME_WIDTH);
+}
+
+function autoGrowTextarea(
+    window: TermDOM["window"],
+    textarea: HTMLTextAreaElement,
+    maxRows: number,
+) {
+    const recalc = () => {
+        const rows = clamp(
+            countWrappedRows(textarea.value, fieldContentWidth(window)),
+            DEFAULT_TEXTAREA_MIN_ROWS,
+            maxRows,
+        );
+        textarea.setAttribute("rows", String(rows));
+    };
+    textarea.addEventListener("input", recalc);
+    window.addEventListener("resize", recalc);
+    recalc();
+    return recalc;
 }
 
 function addStyles(document: Document) {
@@ -63,6 +147,13 @@ function createPromptRoot(document: Document, label: string) {
     }
     document.body.appendChild(root);
     return root;
+}
+
+function createField(document: Document, control: HTMLInputElement | HTMLTextAreaElement) {
+    const field = document.createElement("div");
+    field.className = "prompt-field";
+    field.appendChild(control);
+    return field;
 }
 
 type PromptSession<T> = {
@@ -133,29 +224,12 @@ export async function prompt({
             ({ document, window, finish }) => {
                 addStyles(document);
                 const root = createPromptRoot(document, question);
-                const row = document.createElement("div");
-                row.className = "prompt-row";
                 const textarea = document.createElement("textarea");
                 textarea.placeholder = placeholder;
                 textarea.value = defaultValue;
-                const initialRows = clamp(
-                    countWrappedRows(defaultValue, window.innerWidth),
-                    DEFAULT_TEXTAREA_MIN_ROWS,
-                    DEFAULT_TEXTAREA_MAX_ROWS,
-                );
-                textarea.setAttribute("rows", String(initialRows));
-                row.appendChild(textarea);
-                root.appendChild(row);
+                root.appendChild(createField(document, textarea));
+                autoGrowTextarea(window, textarea, DEFAULT_TEXTAREA_MAX_ROWS);
                 textarea.focus();
-
-                textarea.addEventListener("input", () => {
-                    const rows = clamp(
-                        countWrappedRows(textarea.value, window.innerWidth),
-                        DEFAULT_TEXTAREA_MIN_ROWS,
-                        DEFAULT_TEXTAREA_MAX_ROWS,
-                    );
-                    textarea.setAttribute("rows", String(rows));
-                });
 
                 document.addEventListener("keydown", (event) => {
                     const e = event as KeyboardEvent;
@@ -180,14 +254,11 @@ export async function prompt({
         ({ document, finish }) => {
             addStyles(document);
             const root = createPromptRoot(document, question);
-            const row = document.createElement("div");
-            row.className = "prompt-row";
             const input = document.createElement("input");
             input.type = type === "password" ? "password" : "text";
             input.placeholder = placeholder;
             input.value = defaultValue;
-            row.appendChild(input);
-            root.appendChild(row);
+            root.appendChild(createField(document, input));
             const error = document.createElement("div");
             error.className = "prompt-error";
             root.appendChild(error);
@@ -240,22 +311,15 @@ export async function confirmCommit({
             addStyles(document);
             const root = createPromptRoot(document, question);
 
-            const row = document.createElement("div");
-            row.className = "prompt-row";
             const textarea = document.createElement("textarea");
             textarea.value = defaultValue;
-            const initialRows = clamp(
-                countWrappedRows(defaultValue, window.innerWidth),
-                DEFAULT_TEXTAREA_MIN_ROWS,
-                16,
-            );
-            textarea.setAttribute("rows", String(initialRows));
-            row.appendChild(textarea);
-            root.appendChild(row);
+            root.appendChild(createField(document, textarea));
+            autoGrowTextarea(window, textarea, 16);
 
             const actions = document.createElement("div");
             actions.className = "prompt-actions";
             const commitButton = document.createElement("button");
+            commitButton.className = "primary";
             commitButton.textContent = "Commit (c)";
             const regenerateButton = document.createElement("button");
             regenerateButton.textContent = "Regenerate (r)";
@@ -283,15 +347,7 @@ export async function confirmCommit({
                 issuesNode.classList.toggle("warning", issues.tooLong);
             };
 
-            textarea.addEventListener("input", () => {
-                const rows = clamp(
-                    countWrappedRows(textarea.value, window.innerWidth),
-                    DEFAULT_TEXTAREA_MIN_ROWS,
-                    16,
-                );
-                textarea.setAttribute("rows", String(rows));
-                refreshIssues();
-            });
+            textarea.addEventListener("input", refreshIssues);
 
             commitButton.addEventListener("click", () => submit("commit"));
             regenerateButton.addEventListener("click", () =>
@@ -339,7 +395,7 @@ export async function select({
             addStyles(document);
             const root = createPromptRoot(document, question);
             const list = document.createElement("div");
-            list.className = "prompt";
+            list.className = "prompt-list";
             const rows: HTMLDivElement[] = [];
 
             for (let index = 0; index < options.length; index++) {
@@ -402,9 +458,9 @@ export async function confirm({
             addStyles(document);
             const root = createPromptRoot(document, question);
             const row = document.createElement("div");
-            row.className = "prompt-row";
-            const yes = document.createElement("span");
-            const no = document.createElement("span");
+            row.className = "prompt-actions";
+            const yes = document.createElement("div");
+            const no = document.createElement("div");
             const hint = document.createElement("span");
             hint.className = "prompt-hint";
             hint.textContent = "(←/→, y/n, Enter)";
@@ -413,8 +469,8 @@ export async function confirm({
 
             let value = defaultValue;
             const paint = () => {
-                yes.className = value ? "prompt-option selected" : "prompt-option";
-                no.className = value ? "prompt-option" : "prompt-option selected";
+                yes.className = value ? "prompt-chip selected" : "prompt-chip";
+                no.className = value ? "prompt-chip" : "prompt-chip selected";
                 yes.textContent = `${value ? "●" : "○"} Yes`;
                 no.textContent = `${value ? "○" : "●"} No`;
             };
