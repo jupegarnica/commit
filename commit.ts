@@ -311,6 +311,9 @@ export function extractTicketFromBranch(
   return /^[A-Z]{2,10}-\d{1,6}$/.test(ticket) ? ticket : null;
 }
 
+export const DEFAULT_COMMIT_STYLE =
+  "conventional commits: use a type prefix — 'feat:' for new features where the code behavior changes, 'fix:' for bug fixes where the code behavior changes, 'refactor:' for code refactoring where the code behavior does not change, 'docs:' for documentation changes, 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc), 'test:' for adding tests, 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.";
+
 export function buildSystemPrompt(options: {
   commits?: string;
   ticket?: string | null;
@@ -321,15 +324,6 @@ export function buildSystemPrompt(options: {
 }): string {
   let systemContent = `You are an expert in git diffs.
     You are helping a user to create a commit message for a git diff.
-    You should use conventional commit notation to create a commit message for this git diff.
-    And follow this conventional commits rules:
-    - 'feat:' for new features where the code behavior changes
-    - 'fix:' for bug fixes where the code behavior changes
-    - 'refactor:' for code refactoring where the code behavior does not change,
-    - 'docs:' for documentation changes,
-    - 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc),
-    - 'test:' for adding tests,
-    - 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.
     Do not use any markdown markup, only text.
     Only describe the changes in the code, do not include any other information like purpose of the changes or which file has been modified.
     Do not output any file names or line numbers.
@@ -345,6 +339,8 @@ export function buildSystemPrompt(options: {
   }
   if (options.style) {
     systemContent += `\nUse this commit style: ${options.style}.`;
+  } else {
+    systemContent += `\nUse this commit style: ${DEFAULT_COMMIT_STYLE}`;
   }
   if (options.hint) {
     systemContent +=
@@ -442,7 +438,7 @@ async function commit(): Promise<void> {
   "provider": "openai",
   "co-author": "",
   "commit-language": "",
-  "commit-style": "",
+  "commit-style": ${JSON.stringify(DEFAULT_COMMIT_STYLE)},
   "hint": "",
   "providers": {
     "openai": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
@@ -540,7 +536,7 @@ Use -- to pass options that may conflict with this CLI.
 --co-author <pattern>: Appends a signature to the commit message. Placeholders: {model} (resolved model id), {email} (co-author email for the provider, prompted and saved on first use). Example: "Co-Authored-By: {model} <{email}>". Leave empty in --config to disable.
 --co-author-email <email>: Overrides the co-author email for this run (resolves the {email} placeholder). Overrides the saved provider config.
 --commit-language <lang>: Language for the commit message (e.g. "Spanish"). Overrides the saved config.
---commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Overrides the saved config.
+--commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Defaults to conventional commits rules; overrides the saved config.
 --hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123"). Overrides the saved config (set it with --config).
 --body: Also generate a body with bullet points after the subject line.
 -D, --debug: Enables debug mode, which will print additional information to the console.
@@ -697,7 +693,7 @@ Use -- to pass options that may conflict with this CLI.
       ),
       "commit-style": await prompt(
         "Enter commit style (e.g. 'imperative mood, max 72 chars'; leave empty for default)",
-        { default: configSaved["commit-style"] || "" },
+        { default: configSaved["commit-style"] || DEFAULT_COMMIT_STYLE },
       ),
       hint: await prompt(
         "Enter default hint (extra context for the message, e.g. 'make a concise subject, and add long body with bullets'; leave empty for none)",
@@ -851,13 +847,14 @@ Use -- to pass options that may conflict with this CLI.
   const commitLanguage = args["commit-language"] ||
     configSaved["commit-language"] || "";
   const commitStyle = args["commit-style"] ||
-    configSaved["commit-style"] || "";
+    configSaved["commit-style"] ||
+    DEFAULT_COMMIT_STYLE;
   if (commitLanguage) {
     console.info(
       colors.gray(`ℹ️  Commit language: ${colors.blue(commitLanguage)}`),
     );
   }
-  if (commitStyle) {
+  if (commitStyle !== DEFAULT_COMMIT_STYLE) {
     console.info(colors.gray(`ℹ️  Commit style: ${colors.blue(commitStyle)}`));
   }
   const systemContent = buildSystemPrompt({

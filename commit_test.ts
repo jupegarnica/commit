@@ -4,6 +4,7 @@ import {
   buildRetryHint,
   buildSystemPrompt,
   collectExtraCommitArgs,
+  DEFAULT_COMMIT_STYLE,
   estimateTokens,
   extractTicketFromBranch,
   hasNoVerifyFlag,
@@ -238,7 +239,12 @@ Deno.test("buildSystemPrompt without extras omits optional sections", () => {
   assertEquals(prompt.includes("commit style of these commits"), false);
   assertEquals(prompt.includes("ticket"), false);
   assertEquals(prompt.includes("Write the commit message in"), false);
-  assertEquals(prompt.includes("Use this commit style"), false);
+});
+
+Deno.test("buildSystemPrompt uses default commit style when none provided", () => {
+  const prompt = buildSystemPrompt({});
+  assertEquals(prompt.includes(`Use this commit style: ${DEFAULT_COMMIT_STYLE}`), true);
+  assertEquals(prompt.includes("'feat:' for new features"), true);
 });
 
 Deno.test("buildSystemPrompt adds language and style when provided", () => {
