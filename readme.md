@@ -43,7 +43,8 @@ commit [OPTIONS]
   key.
 - `--model <model>`: Specifies the model to use. Defaults to the provider's
   default model.
-- `--config`: Prompts for the default options and saves them.
+- `--config`: Opens an interactive menu to review and edit the saved default
+  options (provider, generation, co-author, debug), then saves them.
 - `--api-key <apiKey>`: Specifies the API key to use. Overrides the provider's
   environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`,
   `OLLAMA_API_KEY`, etc.).
@@ -76,6 +77,26 @@ commit [OPTIONS]
 
 Any extra options not recognized by this CLI are forwarded to `git commit`. If
 an option conflicts with this CLI, pass it after `--`.
+
+### Configuration menu (`--config`)
+
+`--config` opens an interactive menu showing the current state of each setting.
+Use the arrow keys to pick a section, edit only what you need, and choose
+**Save and exit** to persist. **Reset to defaults** restores every setting
+(requires confirmation) and **Cancel** discards the changes.
+
+- **Provider**: pick a provider from a list and edit its API key (keep, replace
+  or clear), model and base URL. API keys are masked and shown as `●●●`.
+- **Generation**: `max-words`, `commits-to-learn`, `unified`, commit language,
+  commit style and hint. Numeric fields are validated inline.
+- **Co-author**: the signature pattern and the per-provider email.
+- **Debug**: toggle debug output.
+
+Before saving, the pending changes are shown as a diff (e.g.
+`debug: false → true`) and you are asked to confirm.
+
+> `--config` requires an interactive terminal; it exits with an error when
+> stdin is not a TTY (e.g. in CI or when piped).
 
 ### Providers
 

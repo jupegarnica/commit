@@ -3,11 +3,7 @@ import * as colors from "@std/fmt/colors";
 import { parseArgs } from "@std/cli";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
-import { confirmCommit } from "./ui/prompt.tsx";
-import {
-  formatCommitMessageIssues,
-  validateCommitMessage,
-} from "./validate.ts";
+import { confirm, confirmCommit, prompt, select } from "./ui/prompt.tsx";
 import { startSpinner, stopSpinner } from "./spinner.ts";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
@@ -404,6 +400,447 @@ export type InteractiveMode = {
   noCommit: boolean;
 };
 
+export type ProviderSettings = {
+  "api-key": string;
+  model: string;
+  "base-URL": string;
+  "co-author-email": string;
+};
+
+export type CommitConfig = {
+  "max-words": number;
+  "commits-to-learn": number;
+  unified: number;
+  debug: boolean;
+  provider: string;
+  "co-author": string;
+  "commit-language": string;
+  "commit-style": string;
+  hint: string;
+  providers: Record<string, ProviderSettings>;
+};
+
+export const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
+
+export function defaultConfig(): CommitConfig {
+  const emptyProvider = (): ProviderSettings => ({
+    "api-key": "",
+    model: "",
+    "base-URL": "",
+    "co-author-email": "",
+  });
+  const providers: Record<string, ProviderSettings> = {};
+  for (const name of VALID_PROVIDERS) {
+    providers[name] = emptyProvider();
+  }
+  return {
+    "max-words": 10000,
+    "commits-to-learn": 10,
+    unified: 10,
+    debug: false,
+    provider: "openai",
+    "co-author": "",
+    "commit-language": "",
+    "commit-style": DEFAULT_COMMIT_STYLE,
+    hint: "",
+    providers,
+  };
+}
+
+export function validateIntegerInput(
+  raw: string,
+  { min = 0, label = "value" }: { min?: number; label?: string } = {},
+): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return `${label} cannot be empty`;
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) {
+    return `${label} must be a number`;
+  }
+  if (!Number.isInteger(value)) {
+    return `${label} must be a whole number`;
+  }
+  if (value < min) {
+    return `${label} must be at least ${min}`;
+  }
+  return null;
+}
+
+export function validateProviderName(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "Provider cannot be empty";
+  }
+  if (!VALID_PROVIDERS.includes(trimmed)) {
+    return `Unknown provider. Valid options: ${VALID_PROVIDERS.join(", ")}`;
+  }
+  return null;
+}
+
+export function migrateLegacyConfig(raw: Record<string, unknown>): CommitConfig {
+  const base = defaultConfig();
+  const config: CommitConfig = {
+    ...base,
+    ...raw,
+    providers: {
+      ...base.providers,
+      ...((raw.providers as Record<string, ProviderSettings>) || {}),
+    },
+  } as CommitConfig;
+
+  // Legacy flat keys lived at the top level before providers existed.
+  const legacyApiKey = raw["api-key"];
+  const legacyModel = raw["model"];
+  const legacyBaseURL = raw["base-URL"];
+  if (typeof legacyApiKey === "string" && legacyApiKey) {
+    config.providers.openai["api-key"] = legacyApiKey;
+  }
+  if (typeof legacyModel === "string" && legacyModel) {
+    config.providers.openai.model = legacyModel;
+  }
+  if (typeof legacyBaseURL === "string" && legacyBaseURL) {
+    config.providers.openai["base-URL"] = legacyBaseURL;
+  }
+  delete (config as Record<string, unknown>)["api-key"];
+  delete (config as Record<string, unknown>)["model"];
+  delete (config as Record<string, unknown>)["base-URL"];
+  return config;
+}
+
+export function loadConfig(): CommitConfig {
+  const stored = localStorage.getItem(DEFAULT_CONFIG_KEY);
+  if (!stored) {
+    return defaultConfig();
+  }
+  try {
+    return migrateLegacyConfig(JSON.parse(stored));
+  } catch (_error) {
+    console.warn(
+      colors.yellow(
+        "⚠️  Saved config is corrupted; falling back to defaults.",
+      ),
+    );
+    return defaultConfig();
+  }
+}
+
+export function saveConfig(config: CommitConfig): void {
+  localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(config));
+}
+
+type ConfigEditorResult =
+  | { action: "save"; config: CommitConfig }
+  | { action: "reset" }
+  | { action: "cancel" };
+
+function providerSummary(config: CommitConfig, name: string): string {
+  const settings = config.providers[name] || {};
+  const provider = PROVIDERS[name];
+  const model = settings.model || provider?.defaultModel || "(none)";
+  const modelOrigin = settings.model ? "saved" : "default";
+  const keyState = settings["api-key"]
+    ? "key saved"
+    : provider?.requiresApiKey
+    ? "no key"
+    : "no key needed";
+  return `${name} · model ${model} (${modelOrigin}) · ${keyState}`;
+}
+
+async function editProviderSection(
+  config: CommitConfig,
+): Promise<CommitConfig> {
+  const providerChoice = await select({
+    question: "Select provider:",
+    options: VALID_PROVIDERS.map((name) =>
+      name === config.provider
+        ? `${name}  (current)  ${providerSummary(config, name)}`
+        : `${name}  ${providerSummary(config, name)}`
+    ),
+    initialIndex: Math.max(0, VALID_PROVIDERS.indexOf(config.provider)),
+  });
+  if (providerChoice < 0) {
+    return config;
+  }
+  const selectedProvider = VALID_PROVIDERS[providerChoice];
+
+  const provider = PROVIDERS[selectedProvider];
+  const settings: ProviderSettings = {
+    ...defaultConfig().providers[selectedProvider],
+    ...(config.providers[selectedProvider] || {}),
+  };
+
+  const requiresApiKey = provider?.requiresApiKey ?? true;
+  const requiresBaseUrl = provider?.requiresBaseUrl ?? false;
+
+  if (requiresApiKey) {
+    const keyState = settings["api-key"] ? "●●● saved" : "(empty)";
+    const keyAction = await select({
+      question: `API key for ${selectedProvider} (${keyState}):`,
+      options: [
+        `Keep current ${keyState}`,
+        "Replace with a new value",
+        "Clear saved key",
+      ],
+    });
+    if (keyAction < 0) {
+      return config;
+    }
+    if (keyAction === 1) {
+      const newKey = await prompt({
+        question: `Enter API key for ${selectedProvider}${
+          provider?.envVar ? ` or leave empty to read from ${provider.envVar}` : ""
+        }`,
+        type: "password",
+      });
+      if (newKey) {
+        settings["api-key"] = newKey;
+      }
+    } else if (keyAction === 2) {
+      settings["api-key"] = "";
+    }
+  }
+
+  const defaultModel = provider?.defaultModel || "";
+  settings.model = await prompt({
+    question:
+      `Model for ${selectedProvider} (leave empty for provider default: ${defaultModel})`,
+    defaultValue: settings.model,
+  });
+
+  if (requiresBaseUrl) {
+    const baseURLFallback = provider?.baseURLEnvVar
+      ? ` (env ${provider.baseURLEnvVar})`
+      : "";
+    settings["base-URL"] = await prompt({
+      question:
+        `Base URL for ${selectedProvider}${baseURLFallback} (leave empty for default)`,
+      defaultValue: settings["base-URL"] || provider?.baseURL || "",
+    });
+  }
+
+  return {
+    ...config,
+    provider: selectedProvider,
+    providers: {
+      ...config.providers,
+      [selectedProvider]: settings,
+    },
+  };
+}
+
+async function editGenerationSection(
+  config: CommitConfig,
+): Promise<CommitConfig> {
+  const next = { ...config };
+
+  const maxWords = await prompt({
+    question: "Max words to send to the API:",
+    defaultValue: String(config["max-words"]),
+    validate: (value) =>
+      validateIntegerInput(value, { min: 1, label: "max-words" }),
+  });
+  next["max-words"] = Number(maxWords.trim());
+
+  const commitsToLearn = await prompt({
+    question: "Number of recent commits to learn style from:",
+    defaultValue: String(config["commits-to-learn"]),
+    validate: (value) =>
+      validateIntegerInput(value, { min: 0, label: "commits-to-learn" }),
+  });
+  next["commits-to-learn"] = Number(commitsToLearn.trim());
+
+  const unified = await prompt({
+    question: "Lines of context in the diff (unified):",
+    defaultValue: String(config.unified),
+    validate: (value) =>
+      validateIntegerInput(value, { min: 0, label: "unified" }),
+  });
+  next.unified = Number(unified.trim());
+
+  next["commit-language"] = await prompt({
+    question:
+      "Commit language (e.g. English, Spanish; leave empty for English):",
+    defaultValue: config["commit-language"] || "",
+  });
+
+  next["commit-style"] = await prompt({
+    question:
+      "Commit style (e.g. 'imperative mood, max 72 chars'; leave empty for default):",
+    defaultValue: config["commit-style"] || DEFAULT_COMMIT_STYLE,
+    type: "textarea",
+  });
+
+  next.hint = await prompt({
+    question:
+      "Default hint (extra context, e.g. 'make a concise subject, add a body with bullets'; leave empty for none):",
+    defaultValue: config.hint || "",
+    type: "textarea",
+  });
+
+  return next;
+}
+
+async function editCoAuthorSection(
+  config: CommitConfig,
+): Promise<CommitConfig> {
+  const pattern = await prompt({
+    question:
+      "Co-author pattern ({model} and {email} placeholders; leave empty to disable):",
+    defaultValue: config["co-author"] || "",
+    type: "textarea",
+  });
+
+  const next: CommitConfig = { ...config, "co-author": pattern };
+  if (!pattern.trim() || !pattern.includes("{email}")) {
+    return next;
+  }
+
+  const provider = config.provider;
+  const settings: ProviderSettings = {
+    ...defaultConfig().providers[provider],
+    ...(config.providers[provider] || {}),
+  };
+  settings["co-author-email"] = await prompt({
+    question:
+      `Co-author email for ${provider} (used by {email}; leave empty to disable):`,
+    defaultValue: settings["co-author-email"] || `noreply@${provider}.com`,
+  });
+  return {
+    ...next,
+    providers: { ...config.providers, [provider]: settings },
+  };
+}
+
+export async function runConfigEditor(
+  initial: CommitConfig,
+): Promise<ConfigEditorResult> {
+  let config = initial;
+
+  while (true) {
+    const menu = [
+      `Provider        ${providerSummary(config, config.provider)}`,
+      `Generation      max-words ${config["max-words"]} · learn ${
+        config["commits-to-learn"]
+      } · unified ${config.unified} · ${
+        config["commit-language"] || "English"
+      } · ${config["commit-style"] === DEFAULT_COMMIT_STYLE ? "default style" : "custom style"} · hint ${
+        config.hint ? "set" : "none"
+      }`,
+      `Co-author       ${config["co-author"] || "disabled"}`,
+      `Debug           ${config.debug ? "on" : "off"}`,
+      "Save and exit",
+      "Reset to defaults",
+      "Cancel",
+    ];
+    const choice = await select({
+      question: "Commit configuration:",
+      options: menu,
+      initialIndex: 4,
+    });
+    if (choice < 0) {
+      return { action: "cancel" };
+    }
+
+    switch (choice) {
+      case 0:
+        config = await editProviderSection(config);
+        break;
+      case 1:
+        config = await editGenerationSection(config);
+        break;
+      case 2:
+        config = await editCoAuthorSection(config);
+        break;
+      case 3:
+        config = { ...config, debug: !config.debug };
+        break;
+      case 4:
+        return { action: "save", config };
+      case 5: {
+        const confirmed = await confirm({
+          question: "Reset all settings to defaults? This cannot be undone.",
+          defaultValue: false,
+        });
+        if (confirmed) {
+          return { action: "reset" };
+        }
+        break;
+      }
+      default:
+        return { action: "cancel" };
+    }
+  }
+}
+
+
+function maskSecret(value: string): string {
+  return value ? "●●●" : "(empty)";
+}
+
+function displayValue(value: string): string {
+  return value || "(empty)";
+}
+
+export function diffConfig(
+  before: CommitConfig,
+  after: CommitConfig,
+): string[] {
+  const changes: string[] = [];
+  const topKeys: (keyof CommitConfig)[] = [
+    "provider",
+    "max-words",
+    "commits-to-learn",
+    "unified",
+    "debug",
+    "co-author",
+    "commit-language",
+    "commit-style",
+    "hint",
+  ];
+  for (const key of topKeys) {
+    const beforeValue = before[key];
+    const afterValue = after[key];
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes.push(
+        `${key}: ${displayValue(String(beforeValue))} → ${
+          displayValue(String(afterValue))
+        }`,
+      );
+    }
+  }
+  const providerNames = new Set([
+    ...Object.keys(before.providers),
+    ...Object.keys(after.providers),
+  ]);
+  for (const name of providerNames) {
+    const beforeProvider = before.providers[name];
+    const afterProvider = after.providers[name];
+    const fields: (keyof ProviderSettings)[] = [
+      "api-key",
+      "model",
+      "base-URL",
+      "co-author-email",
+    ];
+    for (const field of fields) {
+      const beforeValue = beforeProvider?.[field] ?? "";
+      const afterValue = afterProvider?.[field] ?? "";
+      if (beforeValue === afterValue) {
+        continue;
+      }
+      const beforeShown = field === "api-key"
+        ? maskSecret(beforeValue)
+        : displayValue(beforeValue);
+      const afterShown = field === "api-key"
+        ? maskSecret(afterValue)
+        : displayValue(afterValue);
+      changes.push(`${name}.${field}: ${beforeShown} → ${afterShown}`);
+    }
+  }
+  return changes;
+}
+
 export function resolveInteractiveMode(
   isTTY: boolean,
   args: Record<string, unknown>,
@@ -430,46 +867,7 @@ async function commit(): Promise<void> {
     ...collectExtraCommitArgs(argsToParse),
     ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),
   ];
-  const DEFAULTS = `{
-  "max-words": 10000,
-  "commits-to-learn": 10,
-  "unified": 10,
-  "debug": false,
-  "provider": "openai",
-  "co-author": "",
-  "commit-language": "",
-  "commit-style": ${JSON.stringify(DEFAULT_COMMIT_STYLE)},
-  "hint": "",
-  "providers": {
-    "openai": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
-    "google": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
-    "anthropic": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
-    "ollama": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" },
-    "ollama-cloud": { "api-key": "", "model": "", "base-URL": "", "co-author-email": "" }
-  }
-  }`;
-  const DEFAULT_CONFIG_KEY = "DEFAULT_CONFIG";
-  const configSaved = JSON.parse(
-    localStorage.getItem(DEFAULT_CONFIG_KEY) || DEFAULTS,
-  );
-
-  // Migration for legacy config
-  if (!configSaved.providers) {
-    configSaved.providers = JSON.parse(DEFAULTS).providers;
-    if (configSaved["api-key"]) {
-      configSaved.providers.openai["api-key"] = configSaved["api-key"];
-      delete configSaved["api-key"];
-    }
-    if (configSaved["model"]) {
-      configSaved.providers.openai["model"] = configSaved["model"];
-      delete configSaved["model"];
-    }
-    if (configSaved["base-URL"]) {
-      configSaved.providers.openai["base-URL"] = configSaved["base-URL"];
-      delete configSaved["base-URL"];
-    }
-    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
-  }
+  const configSaved = loadConfig();
 
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
@@ -575,139 +973,46 @@ Use -- to pass options that may conflict with this CLI.
     : "(no API)";
 
   if (args.config) {
-    const defaultConfig = JSON.parse(DEFAULTS);
-    const configChanged = Object.keys(configSaved).some(
-      (key) => configSaved[key] !== defaultConfig[key],
-    );
-
-    if (configChanged) {
-      const reset = await $.select({
-        message: "Would you like to change config or reset to default?",
-        options: ["change", "default"],
-      });
-
-      if (reset === 1) {
-        localStorage.setItem(DEFAULT_CONFIG_KEY, DEFAULTS);
-        console.info("All settings have been reset to default.");
-        return;
-      }
+    if (!mode.interactive) {
+      console.error(
+        "✗ --config requires an interactive terminal. Run it directly in a TTY.",
+      );
+      Deno.exit(1);
     }
 
-    const selectedProvider = await prompt(
-      `Enter provider (${VALID_PROVIDERS.join(", ")})`,
-      {
-        default: configSaved["provider"] || "openai",
-      },
-    );
+    const result = await runConfigEditor(configSaved);
+    if (result.action === "cancel") {
+      console.info("Config unchanged.");
+      return;
+    }
+    if (result.action === "reset") {
+      saveConfig(defaultConfig());
+      console.info("All settings have been reset to default.");
+      return;
+    }
 
-    const providerConfigToEdit = configSaved.providers[selectedProvider] || {
-      "api-key": "",
-      model: "",
-      "base-URL": "",
-      "co-author-email": "",
-    };
+    const changes = diffConfig(configSaved, result.config);
+    if (changes.length === 0) {
+      console.info("No changes to save.");
+      return;
+    }
 
-    const providerDefaultModel = PROVIDERS[selectedProvider]?.defaultModel ||
-      "";
-    const providerEnvVar = PROVIDERS[selectedProvider]?.envVar || "";
+    console.info(colors.gray("Pending changes:"));
+    for (const change of changes) {
+      console.info(colors.gray(`  • ${change}`));
+    }
+    const confirmed = await confirm({
+      question: "Save these changes?",
+      defaultValue: true,
+    });
+    if (!confirmed) {
+      console.info("Config unchanged.");
+      return;
+    }
 
-    const selectedProviderConfig = PROVIDERS[selectedProvider];
-    const requiresApiKey = selectedProviderConfig?.requiresApiKey ?? true;
-    const requiresBaseUrl = selectedProviderConfig?.requiresBaseUrl ?? false;
-    const providerBaseURLEnvVar = selectedProviderConfig?.baseURLEnvVar || "";
-    const providerDefaultBaseURL = selectedProviderConfig?.baseURL || "";
-
-    const coAuthorPattern = await prompt(
-      "Enter co-author pattern (use {model} and {email} placeholders, leave empty to disable)",
-      {
-        default: configSaved["co-author"] || "",
-      },
-    );
-    const coAuthorEmail = await prompt(
-      `Enter co-author email for ${selectedProvider} (used by the {email} placeholder, leave empty to disable)`,
-      {
-        default: providerConfigToEdit["co-author-email"] || "",
-      },
-    );
-
-    const newProviderConfig = {
-      "api-key": requiresApiKey
-        ? await prompt(
-          `Enter API key for ${selectedProvider}${
-            providerEnvVar
-              ? ` or leave empty to read from ${providerEnvVar}`
-              : ""
-          }`,
-          {
-            default: providerConfigToEdit["api-key"],
-            mask: true,
-          },
-        )
-        : providerConfigToEdit["api-key"],
-      model: await prompt(
-        `Enter model for ${selectedProvider} (leave empty to use provider default, currently: ${providerDefaultModel})`,
-        {
-          default: providerConfigToEdit["model"],
-        },
-      ),
-      "base-URL": requiresBaseUrl
-        ? await prompt(
-          `Enter base URL for ${selectedProvider}${
-            providerBaseURLEnvVar
-              ? ` or leave empty to read from ${providerBaseURLEnvVar}`
-              : ""
-          }`,
-          {
-            default: providerConfigToEdit["base-URL"] || providerDefaultBaseURL,
-          },
-        )
-        : providerConfigToEdit["base-URL"],
-      "co-author-email": coAuthorEmail,
-    };
-
-    const newConfig = {
-      provider: selectedProvider,
-      "max-words": Number(
-        await prompt("Enter max-words", { default: configSaved["max-words"] }),
-      ),
-      "commits-to-learn": Number(
-        await prompt("Enter commits-to-learn", {
-          default: configSaved["commits-to-learn"],
-        }),
-      ),
-      unified: Number(
-        await prompt("Enter unified (lines of context in diff)", {
-          default: configSaved["unified"],
-        }),
-      ),
-      debug:
-        (await $.select({
-          message: "Debug mode? (prints extra information)",
-          options: ["no", "yes"],
-          initialIndex: configSaved["debug"] ? 1 : 0,
-        })) === 1,
-      "co-author": coAuthorPattern,
-      "commit-language": await prompt(
-        "Enter commit language (e.g. English, Spanish; leave empty for English)",
-        { default: configSaved["commit-language"] || "" },
-      ),
-      "commit-style": await prompt(
-        "Enter commit style (e.g. 'imperative mood, max 72 chars'; leave empty for default)",
-        { default: configSaved["commit-style"] || DEFAULT_COMMIT_STYLE },
-      ),
-      hint: await prompt(
-        "Enter default hint (extra context for the message, e.g. 'make a concise subject, and add long body with bullets'; leave empty for none)",
-        { default: configSaved["hint"] || "" },
-      ),
-      providers: {
-        ...configSaved.providers,
-        [selectedProvider]: newProviderConfig,
-      },
-    };
-
-    localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(newConfig));
+    saveConfig(result.config);
     console.info("Config saved.");
-    args.debug && console.debug({ newConfig });
+    args.debug && console.debug({ config: result.config });
     return;
   }
 
@@ -719,12 +1024,11 @@ Use -- to pass options that may conflict with this CLI.
       );
       Deno.exit(1);
     }
-    finalApiKey = await $.prompt(
-      `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
-      {
-        mask: true,
-      },
-    );
+    finalApiKey = await prompt({
+      question:
+        `No API key found. Enter ${providerName} API key (won't be saved, use --config to save it)`,
+      type: "password",
+    });
   }
 
   let finalBaseURL = baseURL;
@@ -735,9 +1039,10 @@ Use -- to pass options that may conflict with this CLI.
       );
       Deno.exit(1);
     }
-    finalBaseURL = await $.prompt(
-      `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
-    );
+    finalBaseURL = await prompt({
+      question:
+        `No base URL found. Enter ${providerName} base URL (won't be saved, use --config to save it)`,
+    });
   }
 
   const coAuthorPattern = args["co-author"] || configSaved["co-author"] || "";
@@ -754,16 +1059,17 @@ Use -- to pass options that may conflict with this CLI.
         ),
       );
     } else {
-      coAuthorEmail = await prompt(
-        `Enter co-author email for ${providerName} (leave empty to skip signature)`,
-        { default: `noreply@${providerName}.com` },
-      );
+      coAuthorEmail = await prompt({
+        question:
+          `Enter co-author email for ${providerName} (leave empty to skip signature)`,
+        defaultValue: `noreply@${providerName}.com`,
+      });
       if (coAuthorEmail) {
         configSaved.providers[providerName] = {
           ...providerConfig,
           "co-author-email": coAuthorEmail,
         };
-        localStorage.setItem(DEFAULT_CONFIG_KEY, JSON.stringify(configSaved));
+        saveConfig(configSaved);
         console.info("Co-author email saved.");
       }
     }
@@ -965,16 +1271,6 @@ Use -- to pass options that may conflict with this CLI.
   if (args.push) {
     await $`git push`;
   }
-}
-
-async function prompt(
-  message: string,
-  options: { default?: string; mask?: boolean; noClear?: boolean } = {},
-): Promise<string> {
-  options.noClear = true;
-  options.default = String(options.default);
-  const result = await $.prompt(`${message}`, options);
-  return String(result).trim();
 }
 
 async function generateCommitMessage(opts: {

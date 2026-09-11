@@ -5,6 +5,8 @@ import {
   buildSystemPrompt,
   collectExtraCommitArgs,
   DEFAULT_COMMIT_STYLE,
+  defaultConfig,
+  diffConfig,
   estimateTokens,
   extractTicketFromBranch,
   hasNoVerifyFlag,
@@ -14,13 +16,17 @@ import {
   KNOWN_STRING_LONG,
   KNOWN_STRING_SHORT,
   maxWordsToTokens,
+  migrateLegacyConfig,
   resolveInteractiveMode,
+  validateIntegerInput,
+  validateProviderName,
   withTimeout,
 } from "./commit.ts";
 import {
   formatCommitMessageIssues,
   validateCommitMessage,
 } from "./validate.ts";
+import { VALID_PROVIDERS } from "./providers.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
   const args = ["--add", "--push", "--no-verify"];
@@ -368,3 +374,70 @@ Deno.test("collectExtraCommitArgs ignores --dry-run alias", () => {
   const allKnown = ["--dry-run", "--no-commit", "--add"];
   assertEquals(collectExtraCommitArgs(allKnown), []);
 });
+
+Deno.test("defaultConfig has a provider entry for every valid provider", () => {
+  const config = defaultConfig();
+  assertEquals(Object.keys(config.providers).sort(), [...VALID_PROVIDERS].sort());
+  assertEquals(config.provider, "openai");
+  assertEquals(config["commit-style"], DEFAULT_COMMIT_STYLE);
+  for (const settings of Object.values(config.providers)) {
+    assertEquals(settings, {
+      "api-key": "",
+      model: "",
+      "base-URL": "",
+      "co-author-email": "",
+    });
+  }
+});
+
+Deno.test("migrateLegacyConfig fills providers and moves flat legacy keys", () => {
+  const migrated = migrateLegacyConfig({
+    provider: "anthropic",
+    "api-key": "sk-legacy",
+    model: "claude-x",
+    "base-URL": "https://example.test",
+    "max-words": 42,
+  });
+  assertEquals(migrated.provider, "anthropic");
+  assertEquals(migrated["max-words"], 42);
+  assertEquals(migrated.providers.openai["api-key"], "sk-legacy");
+  assertEquals(migrated.providers.openai.model, "claude-x");
+  assertEquals(migrated.providers.openai["base-URL"], "https://example.test");
+  assertEquals("api-key" in migrated, false);
+  assertEquals("model" in migrated, false);
+  assertEquals("base-URL" in migrated, false);
+  // Untouched providers still exist with defaults.
+  assertEquals(migrated.providers.google["api-key"], "");
+});
+
+Deno.test("validateIntegerInput rejects empty, non-numeric and negative values", () => {
+  assertEquals(validateIntegerInput("10"), null);
+  assertEquals(validateIntegerInput(" 10 "), null);
+  assertEquals(validateIntegerInput("0", { min: 0 }), null);
+  assertEquals(validateIntegerInput("", { label: "max-words" }), "max-words cannot be empty");
+  assertEquals(validateIntegerInput("abc", { label: "max-words" }), "max-words must be a number");
+  assertEquals(validateIntegerInput("1.5", { label: "max-words" }), "max-words must be a whole number");
+  assertEquals(validateIntegerInput("-1", { min: 0, label: "unified" }), "unified must be at least 0");
+});
+
+Deno.test("validateProviderName accepts only known providers", () => {
+  assertEquals(validateProviderName("anthropic"), null);
+  assertEquals(validateProviderName(""), "Provider cannot be empty");
+  assertEquals(validateProviderName("nope")?.startsWith("Unknown provider"), true);
+});
+
+Deno.test("diffConfig reports top-level and provider field changes", () => {
+  const before = defaultConfig();
+  const after = defaultConfig();
+  after["max-words"] = 500;
+  after.debug = true;
+  after.providers.openai.model = "gpt-x";
+  after.providers.openai["api-key"] = "secret";
+  const changes = diffConfig(before, after);
+  assertEquals(changes.includes("max-words: 10000 → 500"), true);
+  assertEquals(changes.includes("debug: false → true"), true);
+  assertEquals(changes.includes("openai.model: (empty) → gpt-x"), true);
+  assertEquals(changes.includes("openai.api-key: (empty) → ●●●"), true);
+  assertEquals(diffConfig(before, defaultConfig()), []);
+});
+

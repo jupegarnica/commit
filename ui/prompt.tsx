@@ -53,13 +53,15 @@ function useAutoGrowingTextareaRows(
 
 async function renderPrompt<T>(node: React.ReactElement, fallbackValue: T, result: { value: T }) {
     const { waitUntilExit, clear } = render(node);
-    const code = await waitUntilExit();
-    clear();
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (code !== 0) {
+    try {
+        await waitUntilExit();
+    } catch (_error) {
+        clear();
+        await new Promise((resolve) => setTimeout(resolve, 100));
         return fallbackValue;
     }
+    clear();
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     return result.value;
 }
@@ -78,11 +80,13 @@ export async function prompt({
     placeholder = "",
     defaultValue = "",
     type = "input",
+    validate,
 }: {
     question: string;
     placeholder?: string;
     defaultValue?: string;
     type?: "input" | "textarea" | "password";
+    validate?: (value: string) => string | null;
 }) {
     const result = { value: "" };
     if (type === "input" || type === "password") {
@@ -95,6 +99,7 @@ export async function prompt({
                 }}
                 defaultValue={defaultValue}
                 type={type}
+                validate={validate}
             />,
             defaultValue,
             result,
@@ -355,16 +360,202 @@ function InputPrompt({
     onSubmit,
     defaultValue,
     type,
+    validate,
 }: {
     label: string;
     placeholder: string;
     onSubmit: (value: string) => void;
     defaultValue: string;
     type?: "input" | "password";
+    validate?: (value: string) => string | null;
 }) {
     const { exit } = useApp();
     const [value, setValue] = React.useState(defaultValue);
+    const [error, setError] = React.useState<string | null>(null);
     const inputId = React.useId();
+
+    const submit = () => {
+        const message = validate?.(value) ?? null;
+        if (message) {
+            setError(message);
+            return;
+        }
+        onSubmit(value);
+        exit();
+    };
+
+    return (
+        <Form
+            onSubmit={submit}
+            style={{ flexDirection: "column", gap: 0 }}
+        >
+            <Box flexDirection="row" gap={1}>
+                {label && <Label style={{ color: "blue" }}>{label}</Label>}
+                <Input
+                    id={inputId}
+                    tabIndex={0}
+                    hidden={false}
+                    // deno-lint-ignore jsx-no-children-prop -- required by @garn/ink-html types
+                    children=""
+                    style={{
+                        flexGrow: 1,
+                        borderLeftStyle: "none",
+                        borderRightStyle: "none",
+                    }}
+                    type={type === "password" ? "password" : "text"}
+                    autoFocus
+                    placeholder={placeholder}
+                    value={value}
+                    onChange={(e: any) => {
+                        setValue(e.target.value);
+                        if (error) setError(null);
+                    }}
+                    onKeyDown={(e: any) => {
+                        if (e.key === "Enter") {
+                            submit();
+                        } else if (e.key === "Escape") {
+                            onSubmit(defaultValue);
+                            exit();
+                        }
+                    }}
+                ></Input>
+            </Box>
+            {error && (
+                <Box flexDirection="row">
+                    <Text color="red">{`✗ ${error}`}</Text>
+                </Box>
+            )}
+        </Form>
+    );
+}
+
+export async function select({
+    question,
+    options,
+    initialIndex = 0,
+}: {
+    question: string;
+    options: string[];
+    initialIndex?: number;
+}): Promise<number> {
+    if (options.length === 0) {
+        throw new Error("Select prompt requires at least one option");
+    }
+    const result = { value: clamp(initialIndex, 0, options.length - 1) };
+    return await renderCommittedPrompt(
+        <SelectPrompt
+            label={question}
+            options={options}
+            initialIndex={result.value}
+            onSubmit={(value) => {
+                result.value = value;
+            }}
+        />,
+        result,
+    );
+}
+
+function SelectPrompt({
+    label,
+    options,
+    initialIndex,
+    onSubmit,
+}: {
+    label: string;
+    options: string[];
+    initialIndex: number;
+    onSubmit: (index: number) => void;
+}) {
+    const { exit } = useApp();
+    const [index, setIndex] = React.useState(initialIndex);
+
+    const submit = () => {
+        onSubmit(index);
+        exit();
+    };
+
+    useInkInput((_input, key) => {
+        if (key.upArrow) {
+            setIndex((current) => (current - 1 + options.length) % options.length);
+        } else if (key.downArrow) {
+            setIndex((current) => (current + 1) % options.length);
+        } else if (key.return) {
+            submit();
+        } else if (key.escape) {
+            onSubmit(-1);
+            exit();
+        }
+    });
+
+    return (
+        <Form onSubmit={submit} style={{ flexDirection: "column", gap: 0 }}>
+            {label && <Label style={{ color: "blue" }}>{label}</Label>}
+            <Box flexDirection="column">
+                {options.map((option, optionIndex) => (
+                    <Box key={`${option}-${optionIndex}`} flexDirection="row">
+                        <Text color={optionIndex === index ? "cyan" : undefined}>
+                            {`${optionIndex === index ? "▶" : " "} ${option}`}
+                        </Text>
+                    </Box>
+                ))}
+            </Box>
+            <Box flexDirection="row">
+                <Text color="gray">↑/↓ to move · Enter to select · Esc to cancel</Text>
+            </Box>
+        </Form>
+    );
+}
+
+export async function confirm({
+    question,
+    defaultValue = false,
+}: {
+    question: string;
+    defaultValue?: boolean;
+}): Promise<boolean> {
+    const result = { value: defaultValue };
+    return await renderPrompt(
+        <ConfirmPrompt
+            label={question}
+            defaultValue={defaultValue}
+            onSubmit={(value) => {
+                result.value = value;
+            }}
+        />,
+        defaultValue,
+        result,
+    );
+}
+
+function ConfirmPrompt({
+    label,
+    defaultValue,
+    onSubmit,
+}: {
+    label: string;
+    defaultValue: boolean;
+    onSubmit: (value: boolean) => void;
+}) {
+    const { exit } = useApp();
+    const [value, setValue] = React.useState(defaultValue);
+
+    useInkInput((input, key) => {
+        if (input === "y" || input === "Y") {
+            onSubmit(true);
+            exit();
+        } else if (input === "n" || input === "N") {
+            onSubmit(false);
+            exit();
+        } else if (key.escape) {
+            onSubmit(false);
+            exit();
+        } else if (key.return) {
+            onSubmit(value);
+            exit();
+        } else if (key.leftArrow || key.rightArrow) {
+            setValue((current) => !current);
+        }
+    });
 
     return (
         <Form
@@ -372,130 +563,15 @@ function InputPrompt({
                 onSubmit(value);
                 exit();
             }}
-            style={{ flexDirection: "row", gap: 1 }}
+            style={{ flexDirection: "column", gap: 0 }}
         >
             {label && <Label style={{ color: "blue" }}>{label}</Label>}
-            <Input
-                id={inputId}
-                tabIndex={0}
-                hidden={false}
-                // deno-lint-ignore jsx-no-children-prop -- required by @garn/ink-html types
-                children=""
-                style={{
-                    flexGrow: 1,
-                    borderLeftStyle: "none",
-                    borderRightStyle: "none",
-                }}
-                type={type === "password" ? "password" : "text"}
-                autoFocus
-                placeholder={placeholder}
-                value={value}
-                onChange={(e: any) => setValue(e.target.value)}
-                onKeyDown={(e: any) => {
-                    if (e.key === "Enter") {
-                        onSubmit(value);
-                        exit();
-                    }
-                }}
-            ></Input>
+            <Box flexDirection="row" gap={1}>
+                <Text color={value ? "cyan" : undefined}>{`${value ? "●" : "○"} Yes`}</Text>
+                <Text color={!value ? "cyan" : undefined}>{`${!value ? "●" : "○"} No`}</Text>
+                <Text color="gray">(←/→, y/n, Enter)</Text>
+            </Box>
         </Form>
     );
 }
 
-// WIP
-
-// export async function select({
-//     question,
-//     options,
-// }: {
-//     question: string;
-//     options: string[];
-// }) {
-//     if (options.length === 0) {
-//         throw new Error("Select prompt requires at least one option");
-//     }
-
-//     const result = { value: options[0] };
-//     const { waitUntilExit, clear } = render(
-//         <SelectPrompt
-//             label={question}
-//             options={options}
-//             onSubmit={(value) => {
-//                 result.value = value;
-//             }}
-//         />,
-//     );
-
-//     await waitUntilExit();
-//     clear();
-//     return result.value;
-// }
-
-// function SelectPrompt({
-//     label,
-//     options,
-//     onSubmit,
-// }: {
-//     label: string;
-//     options: string[];
-//     onSubmit: (value: string) => void;
-// }) {
-//     const { exit } = useApp();
-//     const [value, setValue] = React.useState(options[0]);
-//     const name = React.useId();
-
-//     const submit = () => {
-//         onSubmit(value);
-//         exit();
-//     };
-
-//     return (
-//         <Form
-//             onSubmit={submit}
-//             style={{ flexDirection: "column", gap: 1 }}
-//         >
-//             {label && <Label>{label}</Label>}
-//             <Div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-//             {options.map((option, index) => (
-//                 <Input
-//                     key={`${option}-${index}`}
-//                     id={`${name}-${index}`}
-//                     tabIndex={0}
-//                     hidden={false}
-//                     type="radio"
-//                     autoFocus={index === 0}
-//                     name={name}
-//                     value={option}
-//                     onChange={() => setValue(option)}
-//                     checked={value === option}
-//                     onKeyDown={(e: any) => {
-//                         console.log('onKeyDown', e)
-//                         if (e.key === "Enter") {
-//                             submit();
-//                         } else if (e.key === "ArrowDown") {
-//                             setValue(options[(index + 1) % options.length]);
-//                         } else if (e.key === "ArrowUp") {
-//                             setValue(
-//                                 options[
-//                                     (index - 1 + options.length) % options.length
-//                                 ],
-//                             );
-//                         }
-//                     }}
-//                 >
-//                     {option}
-//                 </Input>
-//             ))}
-//             </Div>
-//             <Button
-//                 id={`${name}-submit`}
-//                 tabIndex={0}
-//                 hidden={false}
-//                 autoFocus={false}
-//                 onClick={submit}
-//             >
-//                 Submit
-//             </Button>
-//         </Form>
-//     );
-// }
