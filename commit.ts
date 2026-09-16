@@ -1260,14 +1260,10 @@ Use -- to pass options that may conflict with this CLI.
       break;
     }
 
-    if (stagedDiffStat && !hasShownStagedDiffStat) {
-      console.info(stagedDiffStat);
-      hasShownStagedDiffStat = true;
-    }
-
     const confirmation = await confirmCommit({
       question: "Review commit message:",
       defaultValue: commitMessage,
+      stagedDiffStat,
     });
 
     if (confirmation.action === "commit") {

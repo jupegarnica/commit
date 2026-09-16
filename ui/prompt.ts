@@ -41,6 +41,13 @@ const STYLES = `
     .prompt-field > input:focus,
     .prompt-field > textarea:focus { text-decoration: none; }
     .prompt-field > textarea { white-space: pre-wrap; }
+    .prompt-diff {
+        color: #808080;
+        font-family: monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin-bottom: 1px;
+    }
     .prompt-error { color: #ff5f5f; }
     .prompt-hint { color: #808080; margin-top: 1px; }
     .prompt-actions .prompt-hint { margin-top: 0; }
@@ -96,6 +103,12 @@ const STYLES = `
 
 function clamp(value: number, min: number, max: number) {
     return Math.max(min, Math.min(max, value));
+}
+
+function stripAnsi(value: string) {
+    // Remove terminal color/control sequences before rendering in TermDOM.
+    // The captured stat is requested with --color=always for console output.
+    return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
 }
 
 function countWrappedRows(value: string, width: number) {
@@ -297,9 +310,11 @@ export async function prompt({
 export async function confirmCommit({
     question,
     defaultValue = "",
+    stagedDiffStat = "",
 }: {
     question: string;
     defaultValue?: string;
+    stagedDiffStat?: string;
 }): Promise<ConfirmCommitResult> {
     const fallback: ConfirmCommitResult = {
         action: "cancel",
@@ -311,6 +326,13 @@ export async function confirmCommit({
         ({ document, window, finish }) => {
             addStyles(document);
             const root = createPromptRoot(document, question);
+
+            if (stagedDiffStat) {
+                const diffNode = document.createElement("div");
+                diffNode.className = "prompt-diff";
+                diffNode.textContent = stripAnsi(stagedDiffStat).trimEnd();
+                root.appendChild(diffNode);
+            }
 
             const textarea = document.createElement("textarea");
             textarea.value = defaultValue;
@@ -428,9 +450,8 @@ export async function select({
             const paint = () => {
                 for (let i = 0; i < rows.length; i++) {
                     const selected = i === index;
-                    rows[i].textContent = `${selected ? "▶" : " "} ${
-                        options[i]
-                    }`;
+                    rows[i].textContent = `${selected ? "▶" : " "} ${options[i]
+                        }`;
                     rows[i].classList.toggle("selected", selected);
                 }
             };
