@@ -78,6 +78,10 @@ commit [OPTIONS]
 Any extra options not recognized by this CLI are forwarded to `git commit`. If
 an option conflicts with this CLI, pass it after `--`.
 
+Interactive messages, diagnostics, errors, help and progress are rendered
+through the terminal UI. When stdin is not a TTY, the same messages use stdout
+and stderr so the command remains usable in scripts and CI.
+
 ### Configuration menu (`--config`)
 
 `--config` opens an interactive menu showing the current state of each setting.

@@ -4,13 +4,19 @@ import { parseArgs } from "@std/cli";
 import { askLLM } from "./gpt.ts";
 import { PROVIDERS, VALID_PROVIDERS } from "./providers.ts";
 import { confirm, confirmCommit, prompt, select } from "./ui/prompt.ts";
+import {
+  endOutputTimer,
+  hl,
+  startOutputTimer,
+  writeOutput,
+} from "./ui/output.ts";
 import { startSpinner, stopSpinner } from "./spinner.ts";
 
 async function daxSilent(strings: TemplateStringsArray, ...values: unknown[]) {
   try {
     return await $.raw(strings, ...values.map(String)).text();
   } catch (error) {
-    console.error(error);
+    await writeOutput("error", error);
     Deno.exit(1);
   }
 }
@@ -367,9 +373,11 @@ export const LLM_TIMEOUT_MS = 120_000;
 
 export function isTransientLLMError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error);
-  if (/401|403|unauthorized|429|rate.?limit|404|not.?found|no such model/i.test(
-    raw,
-  )) {
+  if (
+    /401|403|unauthorized|429|rate.?limit|404|not.?found|no such model/i.test(
+      raw,
+    )
+  ) {
     return false;
   }
   return /timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|fetch failed|network/i
@@ -485,7 +493,9 @@ export function validateProviderName(value: string): string | null {
   return null;
 }
 
-export function migrateLegacyConfig(raw: Record<string, unknown>): CommitConfig {
+export function migrateLegacyConfig(
+  raw: Record<string, unknown>,
+): CommitConfig {
   const base = defaultConfig();
   const config: CommitConfig = {
     ...base,
@@ -515,7 +525,7 @@ export function migrateLegacyConfig(raw: Record<string, unknown>): CommitConfig 
   return config;
 }
 
-export function loadConfig(): CommitConfig {
+export async function loadConfig(): Promise<CommitConfig> {
   const stored = localStorage.getItem(DEFAULT_CONFIG_KEY);
   if (!stored) {
     return defaultConfig();
@@ -523,7 +533,8 @@ export function loadConfig(): CommitConfig {
   try {
     return migrateLegacyConfig(JSON.parse(stored));
   } catch (_error) {
-    console.warn(
+    await writeOutput(
+      "warn",
       colors.yellow(
         "⚠️  Saved config is corrupted; falling back to defaults.",
       ),
@@ -596,7 +607,9 @@ async function editProviderSection(
     if (keyAction === 1) {
       const newKey = await prompt({
         question: `Enter API key for ${selectedProvider}${
-          provider?.envVar ? ` or leave empty to read from ${provider.envVar}` : ""
+          provider?.envVar
+            ? ` or leave empty to read from ${provider.envVar}`
+            : ""
         }`,
         type: "password",
       });
@@ -752,9 +765,11 @@ export async function runConfigEditor(
         config["commits-to-learn"]
       } · unified ${config.unified} · ${
         config["commit-language"] || "English"
-      } · ${config["commit-style"] === DEFAULT_COMMIT_STYLE ? "default style" : "custom style"} · hint ${
-        config.hint ? "set" : "none"
-      }`,
+      } · ${
+        config["commit-style"] === DEFAULT_COMMIT_STYLE
+          ? "default style"
+          : "custom style"
+      } · hint ${config.hint ? "set" : "none"}`,
       `Co-author       ${config["co-author"] || "disabled"}`,
       `Display         provider ${
         config["show-provider"] ? "on" : "off"
@@ -808,7 +823,6 @@ export async function runConfigEditor(
     }
   }
 }
-
 
 function maskSecret(value: string): string {
   return value ? "●●●" : "(empty)";
@@ -905,25 +919,30 @@ async function commit(): Promise<void> {
     ...collectExtraCommitArgs(argsToParse),
     ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),
   ];
-  const configSaved = loadConfig();
+  const configSaved = await loadConfig();
 
   const MAX_WORD = Number(args["max-words"]) || configSaved["max-words"];
   const unified = Number(args.unified) || configSaved.unified || 10;
   const debug = args.debug || configSaved.debug;
 
   const isTTY = Deno.stdin.isTerminal();
-  const noCommitFlag = args["no-commit"] || (args as Record<string, unknown>)["dry-run"] === true;
+  const noCommitFlag = args["no-commit"] ||
+    (args as Record<string, unknown>)["dry-run"] === true;
   const mode = resolveInteractiveMode(isTTY, {
     "skip-edit": args["skip-edit"],
     "no-commit": noCommitFlag,
   });
   if (noCommitFlag) {
-    console.info(
-      colors.gray("ℹ️  Dry run: commit message will be printed, not committed."),
+    await writeOutput(
+      "info",
+      colors.gray(
+        "ℹ️  Dry run: commit message will be printed, not committed.",
+      ),
     );
   }
   if (!mode.interactive) {
-    console.warn(
+    await writeOutput(
+      "warn",
       colors.yellow(
         "⚠️  Non-interactive terminal detected: skipping message review (--skip-edit).",
       ),
@@ -950,7 +969,9 @@ async function commit(): Promise<void> {
     undefined;
 
   if (args.help) {
-    console.info(`Usage: commit [options]
+    await writeOutput(
+      "info",
+      `Usage: commit [options]
 
 Note: Options can be combined, e.g., -AP for add and push.
 Extra options not recognized by this CLI are passed to git commit.
@@ -975,11 +996,12 @@ Use -- to pass options that may conflict with this CLI.
 --commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Defaults to conventional commits rules; overrides the saved config.
 --hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123"). Overrides the saved config (set it with --config).
 --body: Also generate a body with bullet points after the subject line.
--D, --debug: Enables debug mode, which will print additional information to the console.
+-D, --debug: Enables debug mode, which renders additional diagnostic information.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
 
-       `);
+       `,
+    );
     return;
   }
 
@@ -994,8 +1016,8 @@ Use -- to pass options that may conflict with this CLI.
         await Deno.readTextFile(new URL("./deno.json", import.meta.url)),
       ).version;
     }
-    debug && console.debug("import.meta.url", import.meta.url);
-    console.info(version);
+    if (debug) await writeOutput("debug", "import.meta.url", import.meta.url);
+    await writeOutput("info", version);
     return;
   }
   const apiKey = args["api-key"] ||
@@ -1012,7 +1034,8 @@ Use -- to pass options that may conflict with this CLI.
 
   if (args.config) {
     if (!mode.interactive) {
-      console.error(
+      await writeOutput(
+        "error",
         "✗ --config requires an interactive terminal. Run it directly in a TTY.",
       );
       Deno.exit(1);
@@ -1020,44 +1043,45 @@ Use -- to pass options that may conflict with this CLI.
 
     const result = await runConfigEditor(configSaved);
     if (result.action === "cancel") {
-      console.info("Config unchanged.");
+      await writeOutput("info", "Config unchanged.");
       return;
     }
     if (result.action === "reset") {
       saveConfig(defaultConfig());
-      console.info("All settings have been reset to default.");
+      await writeOutput("info", "All settings have been reset to default.");
       return;
     }
 
     const changes = diffConfig(configSaved, result.config);
     if (changes.length === 0) {
-      console.info("No changes to save.");
+      await writeOutput("info", "No changes to save.");
       return;
     }
 
-    console.info(colors.gray("Pending changes:"));
+    await writeOutput("info", colors.gray("Pending changes:"));
     for (const change of changes) {
-      console.info(colors.gray(`  • ${change}`));
+      await writeOutput("info", colors.gray(`  • ${change}`));
     }
     const confirmed = await confirm({
       question: "Save these changes?",
       defaultValue: true,
     });
     if (!confirmed) {
-      console.info("Config unchanged.");
+      await writeOutput("info", "Config unchanged.");
       return;
     }
 
     saveConfig(result.config);
-    console.info("Config saved.");
-    args.debug && console.debug({ config: result.config });
+    await writeOutput("info", "Config saved.");
+    if (args.debug) await writeOutput("debug", { config: result.config });
     return;
   }
 
   let finalApiKey = apiKey;
   if (!finalApiKey && provider.requiresApiKey) {
     if (!mode.interactive) {
-      console.error(
+      await writeOutput(
+        "error",
         `No API key for ${providerName}. Set ${provider.envVar} or pass --api-key when running non-interactively.`,
       );
       Deno.exit(1);
@@ -1072,7 +1096,8 @@ Use -- to pass options that may conflict with this CLI.
   let finalBaseURL = baseURL;
   if (!finalBaseURL && provider.requiresBaseUrl) {
     if (!mode.interactive) {
-      console.error(
+      await writeOutput(
+        "error",
         `No base URL for ${providerName}. Set ${provider.baseURLEnvVar} or pass --base-URL when running non-interactively.`,
       );
       Deno.exit(1);
@@ -1091,7 +1116,8 @@ Use -- to pass options that may conflict with this CLI.
     !coAuthorEmail
   ) {
     if (!mode.interactive) {
-      console.warn(
+      await writeOutput(
+        "warn",
         colors.yellow(
           "⚠️  Co-author email not set: signature skipped. Set --co-author-email or --config.",
         ),
@@ -1108,7 +1134,7 @@ Use -- to pass options that may conflict with this CLI.
           "co-author-email": coAuthorEmail,
         };
         saveConfig(configSaved);
-        console.info("Co-author email saved.");
+        await writeOutput("info", "Co-author email saved.");
       }
     }
   }
@@ -1125,17 +1151,23 @@ Use -- to pass options that may conflict with this CLI.
     }
   }
   if (configSaved["show-provider"]) {
-    console.info(
-      colors.gray(
-        `ℹ️  Using provider: ${colors.blue(providerName)}, model: ${
-          colors.blue(model)
-        }, API key source: ${colors.blue(readApiKeyFrom)}`,
-      ),
+    await writeOutput(
+      "info",
+      `ℹ️  Using provider: ${hl(providerName)}, model: ${
+        hl(model)
+      }, API key source: ${hl(readApiKeyFrom)}`,
     );
   }
-  debug &&
-    console.debug({ args, providerName, model, baseURL, extraCommitArgs });
-  debug && console.time("git diff");
+  if (debug) {
+    await writeOutput("debug", {
+      args,
+      providerName,
+      model,
+      baseURL,
+      extraCommitArgs,
+    });
+  }
+  await startOutputTimer("git diff");
   let diff =
     await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
@@ -1144,11 +1176,12 @@ Use -- to pass options that may conflict with this CLI.
       await daxSilent`git show --unified=${unified} --pretty=format: HEAD`;
     diff += "\n" + lastCommitDiff;
   }
-  debug && console.timeEnd("git diff");
-  debug && console.debug({ diff });
+  await endOutputTimer("git diff", debug);
+  if (debug) await writeOutput("debug", { diff });
 
   if (!diff) {
-    console.error(
+    await writeOutput(
+      "error",
       "No staged changes to commit. \nUse --add flag to add all changes to commit, or use git add for specific files.",
     );
     return Deno.exit(1);
@@ -1156,24 +1189,24 @@ Use -- to pass options that may conflict with this CLI.
 
   const words = diff.split(" ").length;
   const tokens = estimateTokens(diff);
-  debug && console.debug({ words, tokens });
+  if (debug) await writeOutput("debug", { words, tokens });
 
   const commitsToLearn = Number(args["commits-to-learn"]) || 10;
   if (isNaN(commitsToLearn)) {
-    console.error(`Invalid commitsToLearn: ${commitsToLearn}`);
+    await writeOutput("error", `Invalid commitsToLearn: ${commitsToLearn}`);
     Deno.exit(1);
   }
   let commits = "";
   if (commitsToLearn > 0) {
-    debug && console.time("git log");
+    await startOutputTimer("git log");
     try {
       commits = await $.raw`git log --oneline -n ${commitsToLearn}`.text();
     } catch (_error) {
       // Fresh repo with no commits yet, or unreadable history: proceed without learning examples.
       commits = "";
     }
-    debug && console.timeEnd("git log");
-    debug && console.debug({ commits });
+    await endOutputTimer("git log", debug);
+    if (debug) await writeOutput("debug", { commits });
   }
 
   let branchName = "";
@@ -1184,10 +1217,9 @@ Use -- to pass options that may conflict with this CLI.
   }
   const ticket = extractTicketFromBranch(branchName.trim());
   if (ticket) {
-    console.info(
-      colors.gray(
-        `ℹ️  Detected ticket ${colors.blue(ticket)} from branch ${colors.blue(branchName.trim())}`,
-      ),
+    await writeOutput(
+      "info",
+      `ℹ️  Detected ticket ${hl(ticket)} from branch ${hl(branchName.trim())}`,
     );
   }
   const commitLanguage = args["commit-language"] ||
@@ -1196,14 +1228,12 @@ Use -- to pass options that may conflict with this CLI.
     configSaved["commit-style"] ||
     DEFAULT_COMMIT_STYLE;
   if (commitLanguage && configSaved["show-commit-language"]) {
-    console.info(
-      colors.gray(`ℹ️  Commit language: ${colors.blue(commitLanguage)}`),
-    );
+    await writeOutput("info", `ℹ️  Commit language: ${hl(commitLanguage)}`);
   }
   if (
     commitStyle !== DEFAULT_COMMIT_STYLE && configSaved["show-commit-style"]
   ) {
-    console.info(colors.gray(`ℹ️  Commit style: ${colors.blue(commitStyle)}`));
+    await writeOutput("info", `ℹ️  Commit style: ${hl(commitStyle)}`);
   }
   const systemContent = buildSystemPrompt({
     commits,
@@ -1231,14 +1261,15 @@ Use -- to pass options that may conflict with this CLI.
         debug,
       });
     } catch (error) {
-      console.error(
+      await writeOutput(
+        "error",
         error instanceof Error ? error.message : String(error),
       );
       Deno.exit(1);
     }
 
     if (!commitMessage) {
-      console.error("No commitMessage");
+      await writeOutput("error", "No commitMessage");
       Deno.exit(1);
     }
 
@@ -1248,13 +1279,13 @@ Use -- to pass options that may conflict with this CLI.
     });
 
     if (mode.noCommit) {
-      console.info(commitMessage);
+      await writeOutput("info", commitMessage);
       return;
     }
 
     if (mode.skipEdit) {
       if (stagedDiffStat && !hasShownStagedDiffStat) {
-        console.info(stagedDiffStat);
+        await writeOutput("info", stagedDiffStat);
         hasShownStagedDiffStat = true;
       }
       break;
@@ -1269,14 +1300,14 @@ Use -- to pass options that may conflict with this CLI.
     if (confirmation.action === "commit") {
       commitMessage = confirmation.value.trim();
       if (!commitMessage) {
-        console.error("No commitMessage");
+        await writeOutput("error", "No commitMessage");
         Deno.exit(1);
       }
       break;
     } else if (confirmation.action === "regenerate") {
       continue;
     } else {
-      console.info("Commit aborted.");
+      await writeOutput("info", "Commit aborted.");
       return;
     }
   }
@@ -1297,11 +1328,14 @@ Use -- to pass options that may conflict with this CLI.
     const trimmedPath = messagePath.trim();
     try {
       await Deno.writeTextFile(trimmedPath, `${commitMessage}\n`);
-      console.error(
-        `✗ Commit failed (exit ${code}). Your approved message is saved at:\n  ${trimmedPath}\n  Retry with: ${buildRetryHint(trimmedPath)}`,
+      await writeOutput(
+        "error",
+        `✗ Commit failed (exit ${code}). Your approved message is saved at:\n  ${trimmedPath}\n  Retry with: ${
+          buildRetryHint(trimmedPath)
+        }`,
       );
     } catch (_writeError) {
-      console.error(`✗ Commit failed (exit ${code}).`);
+      await writeOutput("error", `✗ Commit failed (exit ${code}).`);
     }
     Deno.exit(code);
   }
@@ -1321,8 +1355,8 @@ async function generateCommitMessage(opts: {
   debug: boolean;
 }): Promise<string> {
   const { provider, model, apiKey, baseURL, diff, systemContent, debug } = opts;
-  startSpinner("Generating commit message...");
-  debug && console.time("askLLM");
+  await startSpinner("Generating commit message...");
+  await startOutputTimer("askLLM");
   try {
     let commitMessage = await withTimeout(
       askLLM({
@@ -1336,25 +1370,26 @@ async function generateCommitMessage(opts: {
       LLM_TIMEOUT_MS,
       "LLM request",
     );
-    debug && console.timeEnd("askLLM");
+    await endOutputTimer("askLLM", debug);
     commitMessage = commitMessage
       ?.trim()
       .replace(/(^['"`]|$['"`])/, "")
       .replace(/`/g, "'");
-    debug && console.debug({ commitMessage });
+    if (debug) await writeOutput("debug", { commitMessage });
     return commitMessage;
   } catch (error) {
-    stopSpinner();
-    debug && console.debug({ llmError: error });
+    await stopSpinner();
+    if (debug) await writeOutput("debug", { llmError: error });
     if (isTransientLLMError(error)) {
-      console.warn(
+      await writeOutput(
+        "warn",
         colors.yellow(
           `⚠️  Attempt 1 failed (${
             error instanceof Error ? error.message : String(error)
           }). Retrying...`,
         ),
       );
-      startSpinner("Retrying commit message generation...");
+      await startSpinner("Retrying commit message generation...");
       try {
         const retryMessage = await withTimeout(
           askLLM({
@@ -1368,28 +1403,28 @@ async function generateCommitMessage(opts: {
           LLM_TIMEOUT_MS,
           "LLM request (retry)",
         );
-        debug && console.timeEnd("askLLM");
+        await endOutputTimer("askLLM", debug);
         return retryMessage
           ?.trim()
           .replace(/(^['"`]|$['"`])/, "")
           .replace(/`/g, "'");
       } catch (retryError) {
-        stopSpinner();
-        debug && console.debug({ retryError });
-        debug && console.timeEnd("askLLM");
+        await stopSpinner();
+        if (debug) await writeOutput("debug", { retryError });
+        await endOutputTimer("askLLM", debug);
         throw new Error(
           friendlyLLMError(provider.sdk, model, baseURL, retryError),
           { cause: retryError },
         );
       }
     }
-    debug && console.debug({ llmError: error });
-    debug && console.timeEnd("askLLM");
+    if (debug) await writeOutput("debug", { llmError: error });
+    await endOutputTimer("askLLM", debug);
     throw new Error(friendlyLLMError(provider.sdk, model, baseURL, error), {
       cause: error,
     });
   } finally {
-    stopSpinner();
+    await stopSpinner();
   }
 }
 
