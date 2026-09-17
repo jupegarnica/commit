@@ -1,34 +1,39 @@
-import * as colors from "@std/fmt/colors";
+import { TermDOM } from "@b9g/termdom";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const INTERVAL_MS = 80;
 
 let timer: ReturnType<typeof setInterval> | undefined;
+let term: TermDOM | undefined;
+let labelNode: HTMLDivElement | undefined;
 
-export function startSpinner(text: string): void {
-  if (!Deno.stdin.isTerminal()) {
-    return;
-  }
-  stopSpinner();
+export async function startSpinner(text: string): Promise<void> {
+  await stopSpinner();
+  if (!Deno.stdin.isTerminal()) return;
+
+  term = new TermDOM();
+  labelNode = term.document.createElement("div");
+  labelNode.textContent = `${FRAMES[0]} ${text}`;
+  term.document.body.appendChild(labelNode);
+  await term.attach();
+
   let frame = 0;
-  Deno.stdout.writeSync(
-    new TextEncoder().encode(`${colors.gray(FRAMES[0])} ${text}`),
-  );
   timer = setInterval(() => {
     frame = (frame + 1) % FRAMES.length;
-    Deno.stdout.writeSync(
-      new TextEncoder().encode(
-        `\r${colors.gray(FRAMES[frame])} ${text}`,
-      ),
-    );
+    if (labelNode) labelNode.textContent = `${FRAMES[frame]} ${text}`;
   }, INTERVAL_MS);
 }
 
-export function stopSpinner(): void {
+export async function stopSpinner(): Promise<void> {
   if (timer !== undefined) {
     clearInterval(timer);
     timer = undefined;
-    Deno.stdout.writeSync(new TextEncoder().encode("\r\x1b[K"));
+  }
+  if (term) {
+    const activeTerm = term;
+    term = undefined;
+    labelNode = undefined;
+    await activeTerm.dispose();
   }
 }
 

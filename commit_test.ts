@@ -27,6 +27,12 @@ import {
   validateCommitMessage,
 } from "./validate.ts";
 import { VALID_PROVIDERS } from "./providers.ts";
+import {
+  formatOutputText,
+  hl,
+  renderHtml,
+  stripHighlightMarkers,
+} from "./ui/output.ts";
 
 Deno.test("collectExtraCommitArgs ignores known flags and forwards unknown", () => {
   const args = ["--add", "--push", "--no-verify"];
@@ -249,7 +255,10 @@ Deno.test("buildSystemPrompt without extras omits optional sections", () => {
 
 Deno.test("buildSystemPrompt uses default commit style when none provided", () => {
   const prompt = buildSystemPrompt({});
-  assertEquals(prompt.includes(`Use this commit style: ${DEFAULT_COMMIT_STYLE}`), true);
+  assertEquals(
+    prompt.includes(`Use this commit style: ${DEFAULT_COMMIT_STYLE}`),
+    true,
+  );
   assertEquals(prompt.includes("'feat:' for new features"), true);
 });
 
@@ -265,7 +274,9 @@ Deno.test("buildSystemPrompt adds language and style when provided", () => {
 Deno.test("buildSystemPrompt adds hint and body when provided", () => {
   const withBoth = buildSystemPrompt({ hint: "fixes #123", body: true });
   assertEquals(
-    withBoth.includes("Additional context from the user. Reflect it in the message if relevant:\nfixes #123"),
+    withBoth.includes(
+      "Additional context from the user. Reflect it in the message if relevant:\nfixes #123",
+    ),
     true,
   );
   assertEquals(withBoth.includes('starting with "- "'), true);
@@ -299,18 +310,25 @@ Deno.test("validateCommitMessage detects long subjects and trailing period", () 
 });
 
 Deno.test("validateCommitMessage detects missing conventional prefix", () => {
-  assertEquals(validateCommitMessage("update the login page").missingPrefix, true);
+  assertEquals(
+    validateCommitMessage("update the login page").missingPrefix,
+    true,
+  );
   assertEquals(validateCommitMessage("feat: add login").missingPrefix, false);
   assertEquals(validateCommitMessage("featx: add login").missingPrefix, true);
 });
 
 Deno.test("formatCommitMessageIssues renders human readable warnings", () => {
   const warning = formatCommitMessageIssues(
-    validateCommitMessage("feat: " + "x".repeat(80)),
-    "feat: " + "x".repeat(80),
+    validateCommitMessage("x".repeat(80) + "."),
   );
-  assertEquals(warning?.includes("chars (> 72)"), true);
-  assertEquals(formatCommitMessageIssues(validateCommitMessage("feat: ok"), "feat: ok"), null);
+  assertEquals(warning?.includes("missing conventional prefix"), true);
+  assertEquals(warning?.includes("subject ends with a period"), true);
+  assertEquals(warning?.includes("223"), false);
+  assertEquals(
+    formatCommitMessageIssues(validateCommitMessage("feat: ok")),
+    null,
+  );
 });
 
 Deno.test("estimateTokens uses 4 chars per token ceiling", () => {
@@ -357,7 +375,10 @@ Deno.test("resolveInteractiveMode forces skipEdit without TTY", () => {
   const tty = resolveInteractiveMode(true, {});
   assertEquals(tty.interactive, true);
   assertEquals(tty.skipEdit, false);
-  const explicit = resolveInteractiveMode(true, { "skip-edit": true, "no-commit": true });
+  const explicit = resolveInteractiveMode(true, {
+    "skip-edit": true,
+    "no-commit": true,
+  });
   assertEquals(explicit.skipEdit, true);
   assertEquals(explicit.noCommit, true);
 });
@@ -366,6 +387,27 @@ Deno.test("buildRetryHint builds git commit command with message file", () => {
   assertEquals(
     buildRetryHint(".git/COMMIT_MSG_AI"),
     "git commit --no-verify -F .git/COMMIT_MSG_AI",
+  );
+});
+
+Deno.test("formatOutputText preserves multiline output and removes ANSI codes", () => {
+  assertEquals(
+    formatOutputText("\u001b[31mfirst\u001b[0m\nsecond", { ok: true }),
+    'first\nsecond {\n  "ok": true\n}',
+  );
+});
+Deno.test("hl marks values for highlighted rendering and plain fallback", () => {
+  const message = `Using provider: ${hl("ollama")}, model: ${
+    hl("deepseek-v4-flash:cloud")
+  }`;
+  assertEquals(
+    renderHtml(message),
+    'Using provider: <span style="color: #5fafff;">ollama</span>, model: ' +
+      '<span style="color: #5fafff;">deepseek-v4-flash:cloud</span>',
+  );
+  assertEquals(
+    stripHighlightMarkers(message),
+    "Using provider: ollama, model: deepseek-v4-flash:cloud",
   );
 });
 Deno.test("collectExtraCommitArgs ignores --dry-run alias", () => {
@@ -377,7 +419,10 @@ Deno.test("collectExtraCommitArgs ignores --dry-run alias", () => {
 
 Deno.test("defaultConfig has a provider entry for every valid provider", () => {
   const config = defaultConfig();
-  assertEquals(Object.keys(config.providers).sort(), [...VALID_PROVIDERS].sort());
+  assertEquals(
+    Object.keys(config.providers).sort(),
+    [...VALID_PROVIDERS].sort(),
+  );
   assertEquals(config.provider, "openai");
   assertEquals(config["commit-style"], DEFAULT_COMMIT_STYLE);
   for (const settings of Object.values(config.providers)) {
@@ -414,16 +459,31 @@ Deno.test("validateIntegerInput rejects empty, non-numeric and negative values",
   assertEquals(validateIntegerInput("10"), null);
   assertEquals(validateIntegerInput(" 10 "), null);
   assertEquals(validateIntegerInput("0", { min: 0 }), null);
-  assertEquals(validateIntegerInput("", { label: "max-words" }), "max-words cannot be empty");
-  assertEquals(validateIntegerInput("abc", { label: "max-words" }), "max-words must be a number");
-  assertEquals(validateIntegerInput("1.5", { label: "max-words" }), "max-words must be a whole number");
-  assertEquals(validateIntegerInput("-1", { min: 0, label: "unified" }), "unified must be at least 0");
+  assertEquals(
+    validateIntegerInput("", { label: "max-words" }),
+    "max-words cannot be empty",
+  );
+  assertEquals(
+    validateIntegerInput("abc", { label: "max-words" }),
+    "max-words must be a number",
+  );
+  assertEquals(
+    validateIntegerInput("1.5", { label: "max-words" }),
+    "max-words must be a whole number",
+  );
+  assertEquals(
+    validateIntegerInput("-1", { min: 0, label: "unified" }),
+    "unified must be at least 0",
+  );
 });
 
 Deno.test("validateProviderName accepts only known providers", () => {
   assertEquals(validateProviderName("anthropic"), null);
   assertEquals(validateProviderName(""), "Provider cannot be empty");
-  assertEquals(validateProviderName("nope")?.startsWith("Unknown provider"), true);
+  assertEquals(
+    validateProviderName("nope")?.startsWith("Unknown provider"),
+    true,
+  );
 });
 
 Deno.test("diffConfig reports top-level and provider field changes", () => {
@@ -440,4 +500,3 @@ Deno.test("diffConfig reports top-level and provider field changes", () => {
   assertEquals(changes.includes("openai.api-key: (empty) → ●●●"), true);
   assertEquals(diffConfig(before, defaultConfig()), []);
 });
-
