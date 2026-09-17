@@ -1,7 +1,8 @@
-import OpenAI from "npm:openai@4.38.3";
-import Anthropic from "npm:@anthropic-ai/sdk@0.80.0";
-import { Ollama } from "npm:ollama@0.6.3";
-import { GoogleGenAI } from "npm:@google/genai@1.47.0";
+import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
+import { Ollama } from "ollama";
+import { GoogleGenAI } from "@google/genai";
+import { writeOutput } from "./ui/output.ts";
 
 export async function askLLM({
   model,
@@ -77,10 +78,9 @@ if (import.meta.main) {
 
   const MAX_TOKENS = 6_000;
   const words = content.split(" ").length;
-  // console.warn({ words });
   if (words > MAX_TOKENS) {
-    console.warn({ content, words });
-    console.error(`Input is too long: ${words} words`);
+    await writeOutput("warn", { content, words });
+    await writeOutput("error", `Input is too long: ${words} words`);
     Deno.exit(1);
   }
   const response = await askLLM({
@@ -93,5 +93,5 @@ if (import.meta.main) {
       "You are a expert programmer. You are helping a user to write a code snippet. You should use the best practices and idiomatic code to write a code snippet for the given problem. If the code snippet is empty return only zero characters.",
   });
 
-  console.log(response);
+  await writeOutput("info", response);
 }

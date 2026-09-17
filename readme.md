@@ -43,7 +43,8 @@ commit [OPTIONS]
   key.
 - `--model <model>`: Specifies the model to use. Defaults to the provider's
   default model.
-- `--config`: Prompts for the default options and saves them.
+- `--config`: Opens an interactive menu to review and edit the saved default
+  options (provider, generation, co-author, debug), then saves them.
 - `--api-key <apiKey>`: Specifies the API key to use. Overrides the provider's
   environment variable (`OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`,
   `OLLAMA_API_KEY`, etc.).
@@ -59,6 +60,13 @@ commit [OPTIONS]
 - `--co-author-email <email>`: Overrides the co-author email for this run
   (resolves the `{email}` placeholder). Takes precedence over the saved provider
   `co-author-email` config and skips the first-use prompt.
+- `--commit-style <style>`: Extra style instructions for the commit message
+  (e.g. `"imperative mood, max 72 chars"`). Defaults to the conventional commits
+  rules; overrides the saved config value. Can be persisted with `--config`.
+- `--hint <text>`: Additional context to guide the commit message generation
+  (e.g. `"fixes #123"` or `"make a concise subject, and add long body with
+  bullets"`). Overrides the saved config value; can be persisted with
+  `--config`.
 - `--base-URL <baseURL>`: Specifies a custom base URL for the provider API.
   Overrides the provider's default. For `ollama`, can also be set via
   `OLLAMA_BASE_URL`. Required for the `ollama` provider if not already saved.
@@ -69,6 +77,30 @@ commit [OPTIONS]
 
 Any extra options not recognized by this CLI are forwarded to `git commit`. If
 an option conflicts with this CLI, pass it after `--`.
+
+Interactive messages, diagnostics, errors, help and progress are rendered
+through the terminal UI. When stdin is not a TTY, the same messages use stdout
+and stderr so the command remains usable in scripts and CI.
+
+### Configuration menu (`--config`)
+
+`--config` opens an interactive menu showing the current state of each setting.
+Use the arrow keys to pick a section, edit only what you need, and choose
+**Save and exit** to persist. **Reset to defaults** restores every setting
+(requires confirmation) and **Cancel** discards the changes.
+
+- **Provider**: pick a provider from a list and edit its API key (keep, replace
+  or clear), model and base URL. API keys are masked and shown as `●●●`.
+- **Generation**: `max-words`, `commits-to-learn`, `unified`, commit language,
+  commit style and hint. Numeric fields are validated inline.
+- **Co-author**: the signature pattern and the per-provider email.
+- **Debug**: toggle debug output.
+
+Before saving, the pending changes are shown as a diff (e.g.
+`debug: false → true`) and you are asked to confirm.
+
+> `--config` requires an interactive terminal; it exits with an error when
+> stdin is not a TTY (e.g. in CI or when piped).
 
 ### Providers
 
