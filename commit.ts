@@ -1235,19 +1235,23 @@ Use -- to pass options that may conflict with this CLI.
   ) {
     await writeOutput("info", `ℹ️  Commit style: ${hl(commitStyle)}`);
   }
-  const systemContent = buildSystemPrompt({
-    commits,
-    ticket,
-    language: commitLanguage,
-    style: commitStyle,
-    hint: args.hint || configSaved["hint"] || "",
-    body: args.body,
-  });
+  const baseHint = args.hint || configSaved["hint"] || "";
+  const buildContent = (hint: string) =>
+    buildSystemPrompt({
+      commits,
+      ticket,
+      language: commitLanguage,
+      style: commitStyle,
+      hint,
+      body: args.body,
+    });
+  let systemContent = buildContent(baseHint);
 
   let commitMessage = "";
   const stagedDiffStat =
     await daxSilent`git diff --color=always --stat --staged -- . ':(exclude)*.lock'`;
   let hasShownStagedDiffStat = false;
+  let regenerationHint = "";
 
   while (true) {
     try {
@@ -1305,6 +1309,12 @@ Use -- to pass options that may conflict with this CLI.
       }
       break;
     } else if (confirmation.action === "regenerate") {
+      regenerationHint = confirmation.hint;
+      const combinedHint = [baseHint, regenerationHint]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join("\n");
+      systemContent = buildContent(combinedHint);
       continue;
     } else {
       await writeOutput("info", "Commit aborted.");

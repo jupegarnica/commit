@@ -9,7 +9,11 @@ type ConfirmCommitAction = "commit" | "regenerate" | "cancel";
 type ConfirmCommitResult = {
     action: ConfirmCommitAction;
     value: string;
+    hint: string;
 };
+
+// Placeholder shown once the Regenerate button turns into an input on focus.
+const REGENERATE_HINT_PLACEHOLDER = "hint to regenerate";
 
 const DEFAULT_TEXTAREA_MIN_ROWS = 1;
 const DEFAULT_TEXTAREA_MAX_ROWS = 12;
@@ -65,6 +69,12 @@ const STYLES = `
         font-weight: bold;
     }
     .prompt-actions { display: flex; flex-direction: row; gap: 1ch; margin-top: 1px; }
+    .prompt-regenerate-field {
+        flex-grow: 1;
+        min-width: 0;
+        border-color: #00d7ff;
+        color: #ffffff;
+    }
     .prompt-chip {
         border: 1px solid #333333;
         border-radius: 1px;
@@ -319,6 +329,7 @@ export async function confirmCommit({
     const fallback: ConfirmCommitResult = {
         action: "cancel",
         value: defaultValue,
+        hint: "",
     };
 
     return await runPrompt<ConfirmCommitResult>(
@@ -344,20 +355,62 @@ export async function confirmCommit({
             const commitButton = document.createElement("button");
             commitButton.className = "primary";
             commitButton.textContent = "Commit (c)";
+            // The Regenerate button swaps itself for an input while focused, so
+            // the user can type a hint and press Enter to regenerate with it.
             const regenerateButton = document.createElement("button");
             regenerateButton.textContent = "Regenerate (r)";
+            // The chrome (border + padding) lives on the field wrapper, matching
+            // the other inputs: putting it on the input itself makes TermDOM
+            // clip the tail of long values. Start hidden; the button shows first.
+            const regenerateField = document.createElement("div");
+            regenerateField.className = "prompt-field prompt-regenerate-field";
+            const regenerateInput = document.createElement("input");
+            regenerateInput.type = "text";
+            regenerateInput.placeholder = REGENERATE_HINT_PLACEHOLDER;
+            regenerateField.appendChild(regenerateInput);
+            regenerateField.hidden = true;
             const cancelButton = document.createElement("button");
             cancelButton.textContent = "Cancel (esc)";
-            actions.append(commitButton, regenerateButton, cancelButton);
+            actions.append(
+                commitButton,
+                regenerateButton,
+                regenerateField,
+                cancelButton,
+            );
             root.appendChild(actions);
 
             const issuesNode = document.createElement("div");
             issuesNode.className = "prompt-issues";
             root.appendChild(issuesNode);
 
-            const submit = (action: ConfirmCommitAction) => {
-                finish({ action, value: textarea.value });
+            const submit = (action: ConfirmCommitAction, hint = "") => {
+                finish({
+                    action,
+                    value: textarea.value,
+                    hint: hint.trim(),
+                });
             };
+
+            const swapRegenerateToInput = () => {
+                if (regenerateField.hidden) {
+                    regenerateButton.hidden = true;
+                    regenerateField.hidden = false;
+                }
+                regenerateInput.focus();
+            };
+            const swapRegenerateToButton = () => {
+                // Ignore the button's own blur caused by moving focus into the
+                // input; only revert when the input itself loses focus.
+                if (document.activeElement === regenerateInput) {
+                    return;
+                }
+                regenerateButton.hidden = false;
+                regenerateField.hidden = true;
+                regenerateInput.value = "";
+            };
+
+            regenerateButton.addEventListener("focus", swapRegenerateToInput);
+            regenerateButton.addEventListener("blur", swapRegenerateToButton);
 
             const refreshIssues = () => {
                 const subject = textarea.value.split("\n", 1)[0] || "";
@@ -385,20 +438,40 @@ export async function confirmCommit({
             textarea.addEventListener("input", refreshIssues);
 
             commitButton.addEventListener("click", () => submit("commit"));
-            regenerateButton.addEventListener("click", () =>
-                submit("regenerate"));
+            // Clicking (or activating) Regenerate enters hint input mode; the
+            // actual regeneration runs on Enter inside the input.
+            regenerateButton.addEventListener("click", swapRegenerateToInput);
             cancelButton.addEventListener("click", () => submit("cancel"));
+
+            regenerateInput.addEventListener("keydown", (event) => {
+                const e = event as KeyboardEvent;
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    submit("regenerate", regenerateInput.value);
+                } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    submit("cancel");
+                }
+            });
+            // Clicking away from the input turns it back into the button and
+            // clears the hint, so the compact layout is restored.
+            regenerateInput.addEventListener("blur", swapRegenerateToButton);
 
             document.addEventListener("keydown", (event) => {
                 const e = event as KeyboardEvent;
-                const inTextarea = document.activeElement === textarea;
+                const active = document.activeElement;
+                const inTextarea = active === textarea;
+                const inRegenerateInput = active === regenerateInput;
+                const inEditable = inTextarea || inRegenerateInput;
                 if (e.key === "Escape") {
                     e.preventDefault();
                     submit("cancel");
-                } else if (!inTextarea && (e.key === "c" || e.key === "C")) {
+                } else if (!inEditable && (e.key === "c" || e.key === "C")) {
                     e.preventDefault();
                     submit("commit");
-                } else if (!inTextarea && (e.key === "r" || e.key === "R")) {
+                } else if (
+                    !inEditable && (e.key === "r" || e.key === "R")
+                ) {
                     e.preventDefault();
                     submit("regenerate");
                 }
