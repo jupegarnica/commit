@@ -321,10 +321,12 @@ export async function confirmCommit({
     question,
     defaultValue = "",
     stagedDiffStat = "",
+    commitLabel = "Commit (c)",
 }: {
     question: string;
     defaultValue?: string;
     stagedDiffStat?: string;
+    commitLabel?: string;
 }): Promise<ConfirmCommitResult> {
     const fallback: ConfirmCommitResult = {
         action: "cancel",
@@ -354,7 +356,7 @@ export async function confirmCommit({
             actions.className = "prompt-actions";
             const commitButton = document.createElement("button");
             commitButton.className = "primary";
-            commitButton.textContent = "Commit (c)";
+            commitButton.textContent = commitLabel;
             // The Regenerate button swaps itself for an input while focused, so
             // the user can type a hint and press Enter to regenerate with it.
             const regenerateButton = document.createElement("button");
