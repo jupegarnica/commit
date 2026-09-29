@@ -57,6 +57,7 @@ export const CLI_FLAGS: FlagDef[] = [
   { name: "hint", type: "string" },
   { name: "body", type: "boolean" },
   { name: "dry-run", type: "boolean" },
+  { name: "multi", type: "boolean" },
 ];
 
 // parseArgs treats extra aliases as booleans, so single-char aliases of
@@ -292,6 +293,42 @@ async function runCommandCapture(
   return code;
 }
 
+async function tryCapture(
+  command: string,
+  args: string[],
+): Promise<{ code: number; stdout: string }> {
+  const cmd = new Deno.Command(command, {
+    args,
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout } = await cmd.output();
+  return { code, stdout: new TextDecoder().decode(stdout).trim() };
+}
+
+async function getHeadSha(): Promise<string | null> {
+  const result = await tryCapture("git", ["rev-parse", "--verify", "HEAD"]);
+  if (result.code !== 0 || !result.stdout) {
+    return null;
+  }
+  return result.stdout;
+}
+
+async function runGitTempIndex(
+  tempIndex: string,
+  args: string[],
+): Promise<number> {
+  const cmd = new Deno.Command("git", {
+    args,
+    env: { GIT_INDEX_FILE: tempIndex },
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const { code } = await cmd.output();
+  return code;
+}
+
 export function buildRetryHint(messagePath: string): string {
   return `git commit --no-verify -F ${messagePath}`;
 }
@@ -311,6 +348,272 @@ export function extractTicketFromBranch(
   const ticket = match[1].replace("_", "-").toUpperCase();
   // Require a letter prefix of at least 2 chars and a number: avoids matching words like "v2" or "hotfix1".
   return /^[A-Z]{2,10}-\d{1,6}$/.test(ticket) ? ticket : null;
+}
+
+export type DiffHunk = {
+  index: number;
+  file: string;
+  text: string;
+};
+
+type FileBlock = {
+  file: string;
+  header: string;
+  hunks: string[];
+};
+
+function fileNameFromDiffHeader(diffHeader: string): string {
+  const plusPlus = diffHeader.split("\n").find((line) =>
+    line.startsWith("+++ ")
+  );
+  if (plusPlus) {
+    const path = plusPlus.slice(4).trim().split("\t")[0];
+    if (path === "/dev/null") {
+      const minus = diffHeader.split("\n").find((line) =>
+        line.startsWith("--- ")
+      );
+      if (minus) {
+        const minusPath = minus.slice(4).trim().split("\t")[0];
+        return minusPath.replace(/^[ab]\//, "");
+      }
+      return "unknown";
+    }
+    return path.replace(/^[ab]\//, "");
+  }
+  const match = diffHeader.match(/^diff --git "?a\/(.+?)"? "?b\/(.+?)"?$/m);
+  if (match) {
+    return match[2];
+  }
+  return "unknown";
+}
+
+export function parseDiffFiles(diff: string): FileBlock[] {
+  if (!diff.trim()) {
+    return [];
+  }
+  const lines = diff.split("\n");
+  const blocks: FileBlock[] = [];
+  let currentHeader: string[] = [];
+  let currentFile = "";
+  let currentHunks: string[] = [];
+  let currentHunk: string[] | null = null;
+  let inDiff = false;
+
+  const flushHunk = () => {
+    if (currentHunk !== null) {
+      currentHunks.push(currentHunk.join("\n"));
+      currentHunk = null;
+    }
+  };
+  const flushBlock = () => {
+    if (!inDiff) {
+      return;
+    }
+    flushHunk();
+    blocks.push({
+      file: currentFile || "unknown",
+      header: currentHeader.join("\n"),
+      hunks: currentHunks,
+    });
+  };
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      flushBlock();
+      inDiff = true;
+      currentHeader = [line];
+      currentHunks = [];
+      currentHunk = null;
+      currentFile = fileNameFromDiffHeader(line);
+      continue;
+    }
+    if (!inDiff) {
+      continue;
+    }
+    if (line.startsWith("@@ ")) {
+      flushHunk();
+      if (currentHunks.length === 0 && currentHunk === null) {
+        // First hunk: everything collected so far beyond the diff line is header.
+        currentFile = fileNameFromDiffHeader(
+          currentHeader.join("\n"),
+        );
+      }
+      currentHunk = [line];
+      continue;
+    }
+    if (currentHunk !== null) {
+      currentHunk.push(line);
+    } else {
+      currentHeader.push(line);
+      const recomputed = fileNameFromDiffHeader(currentHeader.join("\n"));
+      if (recomputed !== "unknown") {
+        currentFile = recomputed;
+      }
+    }
+  }
+  flushBlock();
+  // Files without hunks (e.g. binary) become a single unit so they are not lost.
+  for (const block of blocks) {
+    if (block.hunks.length === 0) {
+      const body = block.header.split("\n").slice(1).join("\n").trim();
+      if (body) {
+        block.hunks = [body];
+        block.header = block.header.split("\n")[0];
+      }
+    }
+  }
+  return blocks.filter((block) =>
+    block.hunks.length > 0 || block.header.trim() !== ""
+  );
+}
+
+export function splitDiffToHunks(diff: string): DiffHunk[] {
+  const hunks: DiffHunk[] = [];
+  for (const block of parseDiffFiles(diff)) {
+    for (const hunkText of block.hunks) {
+      hunks.push({ index: hunks.length, file: block.file, text: hunkText });
+    }
+  }
+  return hunks;
+}
+
+export function buildPatchForHunks(diff: string, indices: number[]): string {
+  if (indices.length === 0) {
+    return "";
+  }
+  const wanted = new Set(indices);
+  const blocks = parseDiffFiles(diff);
+  let global = 0;
+  const out: string[] = [];
+  for (const block of blocks) {
+    const kept: string[] = [];
+    for (const hunkText of block.hunks) {
+      if (wanted.has(global)) {
+        kept.push(hunkText);
+      }
+      global++;
+    }
+    if (kept.length > 0) {
+      out.push([block.header, ...kept].join("\n"));
+    }
+  }
+  const patch = out.join("\n");
+  return patch.endsWith("\n") ? patch : patch + "\n";
+}
+
+export function extractLockPatch(diff: string): string {
+  const blocks = parseDiffFiles(diff);
+  const out: string[] = [];
+  for (const block of blocks) {
+    if (block.file.endsWith(".lock")) {
+      out.push([block.header, ...block.hunks].join("\n"));
+    }
+  }
+  if (out.length === 0) {
+    return "";
+  }
+  const patch = out.join("\n");
+  return patch.endsWith("\n") ? patch : patch + "\n";
+}
+
+export function isLockFile(path: string): boolean {
+  return path.endsWith(".lock");
+}
+
+export type SplitGroup = {
+  hunks: number[];
+  reason: string;
+};
+
+export function buildSplitPrompt(options: {
+  files: string[];
+  stat: string;
+  hunks: DiffHunk[];
+}): { systemContent: string; userContent: string } {
+  const numbered = options.hunks
+    .map((hunk) => `--- hunk ${hunk.index} (${hunk.file}) ---\n${hunk.text}`)
+    .join("\n");
+  const systemContent =
+    `You are an expert in git diffs. Split staged changes into coherent commits by responsibility.
+Group hunks that belong to the same feature, fix, refactor, docs, style, test or chore. Keep the number of commits minimal: use one commit unless responsibilities are clearly distinct.
+The same file may appear in several commits when it contains unrelated responsibilities.
+Only describe the grouping, do not write commit messages.
+Return ONLY a JSON array with this exact shape, no markdown, no comments, no trailing text:
+[{"hunks":[0,2],"reason":"short reason"}]
+Rules: every hunk index from 0 to ${
+      options.hunks.length - 1
+    } must appear in exactly one group, no duplicates, no out-of-range indices, no empty groups.`;
+  const userContent =
+    `Files:\n${options.files.join("\n")}\n\nStat:\n${options.stat}\n\nHunks:\n${numbered}`;
+  return { systemContent, userContent };
+}
+
+export function parseSplitResponse(
+  text: string,
+  hunkCount: number,
+): SplitGroup[] {
+  let cleaned = text.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+  const start = cleaned.indexOf("[");
+  const end = cleaned.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error("Split response is not a JSON array.");
+  }
+  cleaned = cleaned.slice(start, end + 1);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (_error) {
+    throw new Error("Split response is not valid JSON.");
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error("Split response must be a non-empty array.");
+  }
+  const groups: SplitGroup[] = parsed.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new Error(`Split group ${i} must be an object.`);
+    }
+    const record = entry as Record<string, unknown>;
+    const hunks = record.hunks;
+    if (!Array.isArray(hunks) || hunks.length === 0) {
+      throw new Error(`Split group ${i} must have a non-empty "hunks" array.`);
+    }
+    const indices = hunks.map((value, j) => {
+      if (typeof value !== "number" || !Number.isInteger(value)) {
+        throw new Error(`Split group ${i} hunk ${j} must be an integer.`);
+      }
+      if (value < 0 || value >= hunkCount) {
+        throw new Error(`Split group ${i} hunk ${value} is out of range.`);
+      }
+      return value;
+    });
+    const reason = typeof record.reason === "string" ? record.reason : "";
+    return { hunks: [...indices].sort((a, b) => a - b), reason };
+  });
+  const seen = new Set<number>();
+  for (const group of groups) {
+    for (const hunk of group.hunks) {
+      if (seen.has(hunk)) {
+        throw new Error(`Hunk ${hunk} appears in more than one group.`);
+      }
+      seen.add(hunk);
+    }
+  }
+  if (seen.size !== hunkCount) {
+    const missing: number[] = [];
+    for (let i = 0; i < hunkCount; i++) {
+      if (!seen.has(i)) {
+        missing.push(i);
+      }
+    }
+    throw new Error(
+      `All hunks must be covered exactly once. Missing: ${missing.join(", ")}.`,
+    );
+  }
+  return groups;
 }
 
 export const DEFAULT_COMMIT_STYLE =
@@ -905,6 +1208,378 @@ export function resolveInteractiveMode(
   };
 }
 
+class MultiAbortError extends Error {}
+class MultiFailedError extends Error {}
+
+export type MultiFlowContext = {
+  unified: number;
+  debug: boolean;
+  mode: InteractiveMode;
+  args: Record<string, unknown>;
+  extraCommitArgs: string[];
+  provider: { sdk: "openai" | "anthropic" | "ollama" | "google" };
+  model: string;
+  finalApiKey: string;
+  finalBaseURL: string | undefined;
+  diff: string;
+  stagedDiffStat: string;
+  coAuthorPattern: string;
+  coAuthorEmail: string;
+  baseHint: string;
+  buildContent: (hint: string) => string;
+};
+
+async function generateSplitGroups(
+  ctx: MultiFlowContext,
+  hunks: DiffHunk[],
+): Promise<SplitGroup[] | null> {
+  const files = [...new Set(hunks.map((hunk) => hunk.file))];
+  const { systemContent, userContent } = buildSplitPrompt({
+    files,
+    stat: ctx.stagedDiffStat,
+    hunks,
+  });
+  if (ctx.debug) {
+    await writeOutput("debug", { splitSystem: systemContent });
+  }
+  await startSpinner("Analyzing staged changes for split...");
+  await startOutputTimer("askLLM-split");
+  let raw = "";
+  try {
+    try {
+      raw = await withTimeout(
+        askLLM({
+          model: ctx.model,
+          apiKey: ctx.finalApiKey,
+          baseURL: ctx.finalBaseURL,
+          content: userContent,
+          systemContent,
+          sdk: ctx.provider.sdk,
+        }),
+        LLM_TIMEOUT_MS,
+        "LLM request",
+      );
+    } catch (error) {
+      if (!isTransientLLMError(error)) {
+        throw error;
+      }
+      await writeOutput(
+        "warn",
+        colors.yellow(
+          `⚠️  Split attempt failed (${
+            error instanceof Error ? error.message : String(error)
+          }). Retrying...`,
+        ),
+      );
+      raw = await withTimeout(
+        askLLM({
+          model: ctx.model,
+          apiKey: ctx.finalApiKey,
+          baseURL: ctx.finalBaseURL,
+          content: userContent,
+          systemContent,
+          sdk: ctx.provider.sdk,
+        }),
+        LLM_TIMEOUT_MS,
+        "LLM request (retry)",
+      );
+    }
+    await endOutputTimer("askLLM-split", ctx.debug);
+    if (ctx.debug) await writeOutput("debug", { splitResponse: raw });
+    return parseSplitResponse(raw, hunks.length);
+  } catch (error) {
+    await endOutputTimer("askLLM-split", ctx.debug);
+    if (ctx.debug) await writeOutput("debug", { splitError: error });
+    await writeOutput(
+      "warn",
+      colors.yellow(
+        `⚠️  Could not split into multiple commits (${
+          error instanceof Error ? error.message : String(error)
+        }). Falling back to a single commit.`,
+      ),
+    );
+    return null;
+  } finally {
+    await stopSpinner();
+  }
+}
+
+// Returns true when --multi was handled (multiple commits done, dry-run
+// printed, or abort after rollback). Returns false to fall back to the
+// normal single-commit flow (e.g. LLM decided a single commit is enough).
+async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
+  if (ctx.args.amend) {
+    await writeOutput("error", "--multi cannot be used with --amend.");
+    Deno.exit(1);
+  }
+  const hunks = splitDiffToHunks(ctx.diff);
+  if (hunks.length <= 1) {
+    return false;
+  }
+  const groups = await generateSplitGroups(ctx, hunks);
+  if (!groups || groups.length <= 1) {
+    return false;
+  }
+  const total = groups.length;
+  await writeOutput(
+    "info",
+    `ℹ️  Splitting staged changes into ${hl(String(total))} commits.`,
+  );
+
+  const fullDiff =
+    await daxSilent`git diff --unified=${ctx.unified} --cached -- .`;
+  const lockPatch = extractLockPatch(fullDiff);
+
+  // Dry run: print one message per group, change nothing.
+  if (ctx.mode.noCommit) {
+    for (let i = 0; i < total; i++) {
+      const group = groups[i];
+      const groupDiff = buildPatchForHunks(ctx.diff, group.hunks);
+      let message = "";
+      try {
+        message = await generateCommitMessage({
+          provider: ctx.provider,
+          model: ctx.model,
+          apiKey: ctx.finalApiKey,
+          baseURL: ctx.finalBaseURL,
+          diff: groupDiff || ctx.diff,
+          systemContent: ctx.buildContent(ctx.baseHint),
+          debug: ctx.debug,
+        });
+      } catch (error) {
+        await writeOutput(
+          "error",
+          error instanceof Error ? error.message : String(error),
+        );
+        Deno.exit(1);
+      }
+      if (!message) {
+        await writeOutput("error", "No commitMessage");
+        Deno.exit(1);
+      }
+      message = appendCoAuthor(message, ctx.coAuthorPattern, {
+        model: ctx.model,
+        email: ctx.coAuthorEmail,
+      });
+      await writeOutput(
+        "info",
+        `--- Commit ${i + 1}/${total} (${group.reason || "no reason"}) ---\n${message}`,
+      );
+    }
+    return true;
+  }
+
+  const headSha = await getHeadSha();
+  const unstaged = (await tryCapture("git", ["diff", "--name-only"])).stdout;
+  let stashed = false;
+  if (unstaged) {
+    const stashCode = await runCommandCapture("git", [
+      "stash",
+      "push",
+      "--keep-index",
+      "-m",
+      "__commit-multi-keep-index__",
+    ]);
+    if (stashCode !== 0) {
+      await writeOutput(
+        "warn",
+        colors.yellow(
+          "⚠️  Could not stash unstaged changes. Falling back to a single commit.",
+        ),
+      );
+      return false;
+    }
+    stashed = true;
+  }
+
+  const tempIndex = await Deno.makeTempFile();
+  const removeTempIndex = async () => {
+    try {
+      await Deno.remove(tempIndex);
+    } catch (_error) {
+      // Temporary file cleanup is best-effort.
+    }
+  };
+  let committed = 0;
+
+  const rollback = async () => {
+    if (committed > 0) {
+      if (headSha) {
+        await runCommandCapture("git", ["reset", "--soft", headSha]);
+      } else {
+        await runCommandCapture("git", ["update-ref", "-d", "HEAD"]);
+      }
+    }
+    if (stashed) {
+      const popCode = await runCommandCapture("git", ["stash", "pop"]);
+      if (popCode !== 0) {
+        await writeOutput(
+          "error",
+          "✗ Rollback incomplete: could not restore stashed unstaged changes. Check `git stash list`.",
+        );
+      }
+    }
+    await removeTempIndex();
+  };
+
+  try {
+    for (let i = 0; i < total; i++) {
+      const group = groups[i];
+      const isLast = i === total - 1;
+      const cumulative = groups.slice(0, i + 1).flatMap((entry) => entry.hunks)
+        .sort((a, b) => a - b);
+      let cumulativePatch = buildPatchForHunks(ctx.diff, cumulative);
+      if (isLast && lockPatch) {
+        cumulativePatch += (cumulativePatch.endsWith("\n") ? "" : "\n") +
+          lockPatch;
+      }
+      const readTreeArgs = headSha ? ["read-tree", headSha] : ["read-tree", "--empty"];
+      if (await runGitTempIndex(tempIndex, readTreeArgs) !== 0) {
+        throw new MultiFailedError(
+          `Could not prepare commit ${i + 1}/${total} (read-tree failed).`,
+        );
+      }
+      const patchFile = await Deno.makeTempFile();
+      try {
+        await Deno.writeTextFile(patchFile, cumulativePatch);
+        if (await runGitTempIndex(tempIndex, ["apply", "--cached", patchFile]) !== 0) {
+          throw new MultiFailedError(
+            `Could not stage changes for commit ${i + 1}/${total} (apply failed).`,
+          );
+        }
+      } finally {
+        try {
+          await Deno.remove(patchFile);
+        } catch (_error) {
+          // Best-effort cleanup.
+        }
+      }
+
+      const groupDiff = buildPatchForHunks(ctx.diff, group.hunks);
+      let groupSystemContent = ctx.buildContent(ctx.baseHint);
+      let finalMessage = "";
+      while (true) {
+        let message = await generateCommitMessage({
+          provider: ctx.provider,
+          model: ctx.model,
+          apiKey: ctx.finalApiKey,
+          baseURL: ctx.finalBaseURL,
+          diff: groupDiff || ctx.diff,
+          systemContent: groupSystemContent,
+          debug: ctx.debug,
+        });
+        if (!message) {
+          throw new MultiFailedError("No commitMessage");
+        }
+        message = appendCoAuthor(message, ctx.coAuthorPattern, {
+          model: ctx.model,
+          email: ctx.coAuthorEmail,
+        });
+        if (ctx.mode.skipEdit) {
+          await writeOutput(
+            "info",
+            `Commit ${i + 1}/${total}: ${group.reason || "no reason"}`,
+          );
+          finalMessage = message;
+          break;
+        }
+        const groupFiles = [
+          ...new Set(
+            group.hunks.map((hunkIndex) => hunks[hunkIndex]?.file ?? ""),
+          ),
+        ].filter(Boolean);
+        const statText =
+          `Commit ${i + 1}/${total} · ${group.reason || "no reason"}\nFiles:\n${
+            groupFiles.map((file) => ` - ${file}`).join("\n")
+          }${isLast && lockPatch ? "\n(+ *.lock changes)" : ""}`;
+        const confirmation = await confirmCommit({
+          question: `Review commit message (${i + 1}/${total}):`,
+          defaultValue: message,
+          stagedDiffStat: statText,
+          commitLabel: `Commit ${i + 1}/${total} (c)`,
+        });
+        if (confirmation.action === "commit") {
+          finalMessage = confirmation.value.trim();
+          if (!finalMessage) {
+            throw new MultiFailedError("No commitMessage");
+          }
+          break;
+        } else if (confirmation.action === "regenerate") {
+          const combinedHint = [ctx.baseHint, confirmation.hint]
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .join("\n");
+          groupSystemContent = ctx.buildContent(combinedHint);
+          continue;
+        } else {
+          throw new MultiAbortError();
+        }
+      }
+
+      const commitArgs = [
+        "commit",
+        "--no-verify",
+        ...ctx.extraCommitArgs,
+        "-m",
+        finalMessage,
+      ];
+      const code = await runGitTempIndex(tempIndex, commitArgs);
+      if (code !== 0) {
+        try {
+          const messagePath =
+            (await daxSilent`git rev-parse --git-path COMMIT_MSG_AI`).trim();
+          await Deno.writeTextFile(messagePath, `${finalMessage}\n`);
+          await writeOutput(
+            "error",
+            `✗ Commit ${i + 1}/${total} failed (exit ${code}). Message saved at:\n  ${messagePath}\n  Retry with: ${
+              buildRetryHint(messagePath)
+            }`,
+          );
+        } catch (_writeError) {
+          await writeOutput(
+            "error",
+            `✗ Commit ${i + 1}/${total} failed (exit ${code}).`,
+          );
+        }
+        throw new MultiFailedError(`Commit ${i + 1}/${total} failed.`);
+      }
+      committed++;
+      await writeOutput("info", `Created commit ${committed}/${total}.`);
+    }
+
+    await removeTempIndex();
+    if (stashed) {
+      const popCode = await runCommandCapture("git", ["stash", "pop"]);
+      if (popCode !== 0) {
+        await writeOutput(
+          "error",
+          "✗ Commits created but `git stash pop` failed. Check `git stash list` to restore unstaged changes.",
+        );
+        Deno.exit(popCode);
+      }
+    }
+    if (ctx.args.push) {
+      await $`git push`;
+    }
+    return true;
+  } catch (error) {
+    if (error instanceof MultiAbortError) {
+      await rollback();
+      await writeOutput(
+        "info",
+        "Commit aborted. Rolled back partial commits; staged changes restored.",
+      );
+      return true;
+    }
+    await rollback();
+    await writeOutput(
+      "error",
+      error instanceof Error ? error.message : String(error),
+    );
+    Deno.exit(1);
+  }
+}
+
 async function commit(): Promise<void> {
   const passthroughIndex = Deno.args.indexOf("--");
   const argsToParse = passthroughIndex === -1
@@ -996,6 +1671,7 @@ Use -- to pass options that may conflict with this CLI.
 --commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Defaults to conventional commits rules; overrides the saved config.
 --hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123"). Overrides the saved config (set it with --config).
 --body: Also generate a body with bullet points after the subject line.
+--multi: Split staged changes into multiple commits by responsibility. Only staged changes are used; the split is decided by the LLM (hunk level, same file can go in several commits). One flow per commit with "Commit i/N" confirmation. Cancelling rolls back partial commits and restores the initial stage. Push (with --push) only runs if all commits succeed.
 -D, --debug: Enables debug mode, which renders additional diagnostic information.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
@@ -1250,6 +1926,34 @@ Use -- to pass options that may conflict with this CLI.
   let commitMessage = "";
   const stagedDiffStat =
     await daxSilent`git diff --color=always --stat --staged -- . ':(exclude)*.lock'`;
+
+  if (args.multi) {
+    const handled = await runMultiCommitFlow({
+      unified,
+      debug,
+      mode,
+      args: args as unknown as Record<string, unknown>,
+      extraCommitArgs,
+      provider,
+      model,
+      finalApiKey: finalApiKey || "",
+      finalBaseURL,
+      diff,
+      stagedDiffStat,
+      coAuthorPattern,
+      coAuthorEmail,
+      baseHint: typeof baseHint === "string" ? baseHint : "",
+      buildContent,
+    });
+    if (handled) {
+      return;
+    }
+    await writeOutput(
+      "info",
+      "ℹ️  Single commit detected; using the normal flow.",
+    );
+  }
+
   let hasShownStagedDiffStat = false;
   let regenerationHint = "";
 
