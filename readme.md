@@ -70,6 +70,13 @@ commit [OPTIONS]
 - `--base-URL <baseURL>`: Specifies a custom base URL for the provider API.
   Overrides the provider's default. For `ollama`, can also be set via
   `OLLAMA_BASE_URL`. Required for the `ollama` provider if not already saved.
+- `--multi`: Splits staged changes into multiple commits by responsibility
+  (hunk level; the same file can go in several commits). Only staged changes
+  are used. The LLM decides the split; if a single commit is enough, the
+  normal flow runs unchanged. Otherwise one normal flow runs per commit with a
+  `Commit i/N` confirmation button. Cancelling rolls back the partial commits
+  and restores the initial stage. `--push` only runs if all commits succeed.
+  Cannot be combined with `--amend`.
 - `--debug`: Enables debug mode, which will print additional information to the
   console.
 - `--help`: Prints the help message.
