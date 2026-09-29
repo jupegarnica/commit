@@ -1,15 +1,19 @@
 import { assertEquals } from "@std/assert";
 import {
   appendCoAuthor,
+  buildPatchForHunks,
   buildRetryHint,
+  buildSplitPrompt,
   buildSystemPrompt,
   collectExtraCommitArgs,
   DEFAULT_COMMIT_STYLE,
   defaultConfig,
   diffConfig,
   estimateTokens,
+  extractLockPatch,
   extractTicketFromBranch,
   hasNoVerifyFlag,
+  isLockFile,
   isTransientLLMError,
   KNOWN_BOOLEAN_LONG,
   KNOWN_BOOLEAN_SHORT,
@@ -17,7 +21,10 @@ import {
   KNOWN_STRING_SHORT,
   maxWordsToTokens,
   migrateLegacyConfig,
+  parseDiffFiles,
+  parseSplitResponse,
   resolveInteractiveMode,
+  splitDiffToHunks,
   validateIntegerInput,
   validateProviderName,
   withTimeout,
@@ -228,7 +235,7 @@ Deno.test("buildKnownSets derives expected flag sets from CLI_FLAGS", () => {
   assertEquals(KNOWN_BOOLEAN_SHORT.has("A"), true);
   assertEquals(KNOWN_STRING_SHORT.has("K"), true);
   assertEquals(KNOWN_BOOLEAN_SHORT.has("Y"), true);
-  assertEquals(KNOWN_BOOLEAN_LONG.size, 11);
+  assertEquals(KNOWN_BOOLEAN_LONG.size, 12);
   assertEquals(KNOWN_STRING_LONG.size, 12);
   assertEquals(KNOWN_BOOLEAN_SHORT.size, 11);
   assertEquals(KNOWN_STRING_SHORT.size, 7);
@@ -499,4 +506,178 @@ Deno.test("diffConfig reports top-level and provider field changes", () => {
   assertEquals(changes.includes("openai.model: (empty) → gpt-x"), true);
   assertEquals(changes.includes("openai.api-key: (empty) → ●●●"), true);
   assertEquals(diffConfig(before, defaultConfig()), []);
+});
+
+Deno.test("collectExtraCommitArgs ignores --multi", () => {
+  assertEquals(collectExtraCommitArgs(["--multi", "--no-verify"]), [
+    "--no-verify",
+  ]);
+  assertEquals(collectExtraCommitArgs(["--multi", "--add"]), []);
+});
+
+const MULTI_SAMPLE_DIFF = `diff --git a/foo.ts b/foo.ts
+index 1111111..2222222 100644
+--- a/foo.ts
++++ b/foo.ts
+@@ -1,3 +1,4 @@
+ line1
++added1
+ line2
+ line3
+@@ -10,3 +11,4 @@
+ line10
++added2
+ line11
+ line12
+diff --git a/bar.ts b/bar.ts
+index 3333333..4444444 100644
+--- a/bar.ts
++++ b/bar.ts
+@@ -1,2 +1,3 @@
+ line1
++added3
+ line2
+`;
+
+Deno.test("splitDiffToHunks numbers hunks across files", () => {
+  const hunks = splitDiffToHunks(MULTI_SAMPLE_DIFF);
+  assertEquals(hunks.length, 3);
+  assertEquals(hunks[0].file, "foo.ts");
+  assertEquals(hunks[1].file, "foo.ts");
+  assertEquals(hunks[2].file, "bar.ts");
+  assertEquals(hunks[0].index, 0);
+  assertEquals(hunks[2].index, 2);
+});
+
+Deno.test("splitDiffToHunks returns empty for empty diff", () => {
+  assertEquals(splitDiffToHunks(""), []);
+  assertEquals(splitDiffToHunks("   \n"), []);
+});
+
+Deno.test("parseDiffFiles keeps file headers separate", () => {
+  const blocks = parseDiffFiles(MULTI_SAMPLE_DIFF);
+  assertEquals(blocks.length, 2);
+  assertEquals(blocks[0].file, "foo.ts");
+  assertEquals(blocks[0].hunks.length, 2);
+  assertEquals(blocks[1].file, "bar.ts");
+  assertEquals(blocks[1].hunks.length, 1);
+});
+
+Deno.test("buildPatchForHunks reconstructs a single-file subset", () => {
+  const patch = buildPatchForHunks(MULTI_SAMPLE_DIFF, [1]);
+  assertEquals(patch.includes("diff --git a/foo.ts b/foo.ts"), true);
+  assertEquals(patch.includes("added2"), true);
+  assertEquals(patch.includes("added1"), false);
+  assertEquals(patch.includes("added3"), false);
+  assertEquals(patch.includes("diff --git a/bar.ts"), false);
+});
+
+Deno.test("buildPatchForHunks keeps same-file hunks under one header", () => {
+  const patch = buildPatchForHunks(MULTI_SAMPLE_DIFF, [0, 2]);
+  assertEquals(patch.includes("added1"), true);
+  assertEquals(patch.includes("added3"), true);
+  assertEquals(patch.includes("added2"), false);
+  assertEquals(
+    patch.split("\n").filter((line) =>
+      line.startsWith("diff --git a/foo.ts")
+    ).length,
+    1,
+  );
+});
+
+Deno.test("buildPatchForHunks returns empty for no indices", () => {
+  assertEquals(buildPatchForHunks(MULTI_SAMPLE_DIFF, []), "");
+});
+
+Deno.test("extractLockPatch isolates lock files", () => {
+  const diff = `${MULTI_SAMPLE_DIFF}diff --git a/deno.lock b/deno.lock
+index 5555555..6666666 100644
+--- a/deno.lock
++++ b/deno.lock
+@@ -1 +1,2 @@
+ lock1
++lock2
+`;
+  const lockPatch = extractLockPatch(diff);
+  assertEquals(lockPatch.includes("deno.lock"), true);
+  assertEquals(lockPatch.includes("lock2"), true);
+  assertEquals(lockPatch.includes("added1"), false);
+  assertEquals(extractLockPatch(MULTI_SAMPLE_DIFF), "");
+});
+
+Deno.test("isLockFile matches lock suffix", () => {
+  assertEquals(isLockFile("deno.lock"), true);
+  assertEquals(isLockFile("sub/dir/package.lock"), true);
+  assertEquals(isLockFile("foo.ts"), false);
+});
+
+Deno.test("buildSplitPrompt numbers every hunk", () => {
+  const hunks = splitDiffToHunks(MULTI_SAMPLE_DIFF);
+  const { systemContent, userContent } = buildSplitPrompt({
+    files: ["foo.ts", "bar.ts"],
+    stat: "foo.ts | 2 ++",
+    hunks,
+  });
+  assertEquals(systemContent.includes("JSON array"), true);
+  assertEquals(userContent.includes("hunk 0 (foo.ts)"), true);
+  assertEquals(userContent.includes("hunk 2 (bar.ts)"), true);
+});
+
+Deno.test("parseSplitResponse accepts a valid grouping", () => {
+  const groups = parseSplitResponse(
+    '[{"hunks":[0,1],"reason":"feature"},{"hunks":[2],"reason":"fix"}]',
+    3,
+  );
+  assertEquals(groups.length, 2);
+  assertEquals(groups[0].hunks, [0, 1]);
+  assertEquals(groups[0].reason, "feature");
+  assertEquals(groups[1].hunks, [2]);
+});
+
+Deno.test("parseSplitResponse strips code fences", () => {
+  const groups = parseSplitResponse(
+    '```json\n[{"hunks":[0],"reason":"a"},{"hunks":[1],"reason":"b"}]\n```',
+    2,
+  );
+  assertEquals(groups.length, 2);
+});
+
+Deno.test("parseSplitResponse rejects duplicate hunks", () => {
+  let message = "";
+  try {
+    parseSplitResponse('[{"hunks":[0,1],"reason":"a"},{"hunks":[1],"reason":"b"}]', 2);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message.includes("more than one group"), true);
+});
+
+Deno.test("parseSplitResponse rejects incomplete coverage", () => {
+  let message = "";
+  try {
+    parseSplitResponse('[{"hunks":[0],"reason":"a"}]', 2);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message.includes("Missing: 1"), true);
+});
+
+Deno.test("parseSplitResponse rejects out of range indices", () => {
+  let message = "";
+  try {
+    parseSplitResponse('[{"hunks":[5],"reason":"a"}]', 2);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message.includes("out of range"), true);
+});
+
+Deno.test("parseSplitResponse rejects non-JSON", () => {
+  let message = "";
+  try {
+    parseSplitResponse("not json at all", 1);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+  assertEquals(message.length > 0, true);
 });
