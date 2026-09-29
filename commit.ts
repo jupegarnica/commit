@@ -98,6 +98,123 @@ export const KNOWN_STRING_LONG = knownSets.stringLong;
 export const KNOWN_BOOLEAN_SHORT = knownSets.booleanShort;
 export const KNOWN_STRING_SHORT = knownSets.stringShort;
 
+// Whitelist of `git commit` options that this CLI is allowed to forward.
+// Anything outside of CLI_FLAGS and this list is rejected before running git.
+export type GitCommitFlag = {
+  name: string;
+  short?: string;
+  type: "boolean" | "string";
+};
+
+export const GIT_COMMIT_ALLOWLIST: GitCommitFlag[] = [
+  { name: "all", short: "a", type: "boolean" },
+  { name: "no-verify", short: "n", type: "boolean" },
+  { name: "verbose", short: "v", type: "boolean" },
+  { name: "quiet", short: "q", type: "boolean" },
+  { name: "signoff", short: "s", type: "boolean" },
+  { name: "no-edit", type: "boolean" },
+  { name: "allow-empty", type: "boolean" },
+  { name: "allow-empty-message", type: "boolean" },
+  { name: "reset-author", type: "boolean" },
+  { name: "no-gpg-sign", type: "boolean" },
+  { name: "only", type: "boolean" },
+  { name: "reuse-message", type: "string" },
+  { name: "fixup", type: "string" },
+  { name: "squash", type: "string" },
+  { name: "author", type: "string" },
+  { name: "date", type: "string" },
+  { name: "trailer", type: "string" },
+  { name: "cleanup", type: "string" },
+];
+
+const gitAllowlistSets = buildKnownSets(GIT_COMMIT_ALLOWLIST);
+
+const ALLOWED_BOOLEAN_LONG = new Set([
+  ...KNOWN_BOOLEAN_LONG,
+  ...gitAllowlistSets.booleanLong,
+]);
+const ALLOWED_STRING_LONG = new Set([
+  ...KNOWN_STRING_LONG,
+  ...gitAllowlistSets.stringLong,
+]);
+const ALLOWED_BOOLEAN_SHORT = new Set([
+  ...KNOWN_BOOLEAN_SHORT,
+  ...gitAllowlistSets.booleanShort,
+]);
+const ALLOWED_STRING_SHORT = new Set([
+  ...KNOWN_STRING_SHORT,
+  ...gitAllowlistSets.stringShort,
+]);
+
+/**
+ * Returns the CLI arguments that are neither CLI flags nor allowlisted
+ * `git commit` options. Options after `--` are always passed through untouched.
+ */
+export function findInvalidArgs(argv: string[]): string[] {
+  const invalid: string[] = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+
+    if (arg === "--") break;
+
+    if (arg.startsWith("--")) {
+      const [key, value] = arg.slice(2).split("=", 2);
+      if (ALLOWED_BOOLEAN_LONG.has(key)) continue;
+      if (ALLOWED_STRING_LONG.has(key)) {
+        if (value === undefined) i++;
+        continue;
+      }
+      invalid.push(arg);
+      continue;
+    }
+
+    if (arg.startsWith("-") && arg !== "-") {
+      const short = arg.slice(1);
+
+      if (short.length === 1) {
+        if (ALLOWED_BOOLEAN_SHORT.has(short)) continue;
+        if (ALLOWED_STRING_SHORT.has(short)) {
+          i++;
+          continue;
+        }
+        invalid.push(arg);
+        continue;
+      }
+
+      if (short.includes("=")) {
+        const [key] = short.split("=", 2);
+        if (ALLOWED_BOOLEAN_SHORT.has(key) || ALLOWED_STRING_SHORT.has(key)) {
+          continue;
+        }
+        invalid.push(arg);
+        continue;
+      }
+
+      const chars = short.split("");
+      const unknown = chars.filter(
+        (c) => !ALLOWED_BOOLEAN_SHORT.has(c) && !ALLOWED_STRING_SHORT.has(c),
+      );
+      if (unknown.length > 0) {
+        invalid.push(arg);
+      } else if (chars.some((c) => ALLOWED_STRING_SHORT.has(c))) {
+        const next = argv[i + 1];
+        if (next && !next.startsWith("-")) i++;
+      }
+      continue;
+    }
+
+    invalid.push(arg);
+  }
+
+  return invalid;
+}
+
+export function describeInvalidArg(arg: string): string {
+  const name = arg.replace(/^-+/, "").split("=")[0];
+  return `${name} argument not valid`;
+}
+
 export function buildParseArgsOptions(flags: FlagDef[]): {
   boolean: string[];
   string: string[];
@@ -1590,6 +1707,22 @@ async function commit(): Promise<void> {
     : Deno.args.slice(passthroughIndex + 1);
 
   const args = parseArgs(argsToParse, buildParseArgsOptions(CLI_FLAGS));
+
+  const invalidArgs = findInvalidArgs(argsToParse);
+  if (invalidArgs.length > 0) {
+    await writeOutput(
+      "error",
+      invalidArgs.map(describeInvalidArg).join("\n"),
+    );
+    await writeOutput(
+      "info",
+      colors.gray(
+        "Run `commit --help` to see the valid options. To forward other options to git commit, pass them after `--`.",
+      ),
+    );
+    Deno.exit(1);
+  }
+
   const extraCommitArgs = [
     ...collectExtraCommitArgs(argsToParse),
     ...(passthroughIndex === -1 ? [] : ["--", ...passthroughArgs]),
@@ -1649,8 +1782,8 @@ async function commit(): Promise<void> {
       `Usage: commit [options]
 
 Note: Options can be combined, e.g., -AP for add and push.
-Extra options not recognized by this CLI are passed to git commit.
-Use -- to pass options that may conflict with this CLI.
+Only the options below and the allowlisted git commit options are accepted.
+To forward any other option to git commit, pass it after --.
 
 -A, --add: Runs git add . before creating the commit message.
 -P, --push: Runs git push after the commit creation.
@@ -1675,6 +1808,15 @@ Use -- to pass options that may conflict with this CLI.
 -D, --debug: Enables debug mode, which renders additional diagnostic information.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
+
+Allowlisted git commit options (any other option must go after --):
+-a, --all: Commit all changed files.
+-n, --no-verify: Bypass the pre-commit and commit-msg hooks.
+-v, --verbose: Show the diff in the commit message template.
+-q, --quiet: Suppress the summary of the commit.
+-s, --signoff: Add a Signed-off-by trailer.
+--no-edit, --allow-empty, --allow-empty-message, --reset-author, --no-gpg-sign, --only
+--reuse-message <commit>, --fixup <commit>, --squash <commit>, --author <author>, --date <date>, --trailer <token>, --cleanup <mode>
 
        `,
     );

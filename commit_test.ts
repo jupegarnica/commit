@@ -12,6 +12,7 @@ import {
   estimateTokens,
   extractLockPatch,
   extractTicketFromBranch,
+  findInvalidArgs,
   hasNoVerifyFlag,
   isLockFile,
   isTransientLLMError,
@@ -513,6 +514,38 @@ Deno.test("collectExtraCommitArgs ignores --multi", () => {
     "--no-verify",
   ]);
   assertEquals(collectExtraCommitArgs(["--multi", "--add"]), []);
+});
+
+Deno.test("findInvalidArgs accepts known CLI flags", () => {
+  assertEquals(findInvalidArgs(["--add", "--push", "--skip-edit"]), []);
+  assertEquals(findInvalidArgs(["-AP"]), []);
+  assertEquals(findInvalidArgs(["--provider", "openai"]), []);
+  assertEquals(findInvalidArgs(["-M", "gpt-4o"]), []);
+  assertEquals(findInvalidArgs(["--model=gpt-4o"]), []);
+});
+
+Deno.test("findInvalidArgs accepts allowlisted git commit flags", () => {
+  assertEquals(findInvalidArgs(["--no-verify"]), []);
+  assertEquals(findInvalidArgs(["-n"]), []);
+  assertEquals(findInvalidArgs(["-an"]), []);
+  assertEquals(findInvalidArgs(["--reuse-message=HEAD"]), []);
+  assertEquals(findInvalidArgs(["--author", "me@example.com"]), []);
+});
+
+Deno.test("findInvalidArgs flags unknown arguments", () => {
+  assertEquals(findInvalidArgs(["--ad"]), ["--ad"]);
+  assertEquals(findInvalidArgs(["--ad", "--add"]), ["--ad"]);
+  assertEquals(findInvalidArgs(["-Z"]), ["-Z"]);
+  assertEquals(findInvalidArgs(["--unknown=1", "--push"]), ["--unknown=1"]);
+  assertEquals(findInvalidArgs(["stray"]), ["stray"]);
+});
+
+Deno.test("findInvalidArgs ignores everything after --", () => {
+  assertEquals(findInvalidArgs(["--add", "--", "--ad", "anything"]), []);
+});
+
+Deno.test("findInvalidArgs does not consume value of a rejected string flag", () => {
+  assertEquals(findInvalidArgs(["--nope", "value"]), ["--nope", "value"]);
 });
 
 const MULTI_SAMPLE_DIFF = `diff --git a/foo.ts b/foo.ts

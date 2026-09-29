@@ -82,8 +82,20 @@ commit [OPTIONS]
 - `--help`: Prints the help message.
 - `--version`: Prints the version number.
 
-Any extra options not recognized by this CLI are forwarded to `git commit`. If
-an option conflicts with this CLI, pass it after `--`.
+Any other option is rejected with an `argument not valid` error before running
+git. A small allowlist of `git commit` options is also accepted:
+
+`-a`/`--all`, `-n`/`--no-verify`, `-v`/`--verbose`, `-q`/`--quiet`,
+`-s`/`--signoff`, `--no-edit`, `--allow-empty`, `--allow-empty-message`,
+`--reset-author`, `--no-gpg-sign`, `--only`, `--reuse-message <commit>`,
+`--fixup <commit>`, `--squash <commit>`, `--author <author>`, `--date <date>`,
+`--trailer <token>` and `--cleanup <mode>`.
+
+To forward anything else to `git commit`, pass it after `--`:
+
+```sh
+commit -- --pathspec-only-option
+```
 
 Interactive messages, diagnostics, errors, help and progress are rendered
 through the terminal UI. When stdin is not a TTY, the same messages use stdout
