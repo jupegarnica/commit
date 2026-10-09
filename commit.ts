@@ -1570,27 +1570,12 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
   }
 
   const headSha = await getHeadSha();
-  const unstaged = (await tryCapture("git", ["diff", "--name-only"])).stdout;
-  let stashed = false;
-  if (unstaged) {
-    const stashCode = await runCommandCapture("git", [
-      "stash",
-      "push",
-      "--keep-index",
-      "-m",
-      "__commit-multi-keep-index__",
-    ]);
-    if (stashCode !== 0) {
-      await writeOutput(
-        "warn",
-        colors.yellow(
-          "⚠️  Could not stash unstaged changes. Falling back to a single commit.",
-        ),
-      );
-      return false;
-    }
-    stashed = true;
-  }
+  // NOTE: no `stash --keep-index` here on purpose. Commits are created via
+  // GIT_INDEX_FILE=tempIndex, so the real index and worktree (including any
+  // unstaged changes) are left untouched. Stashing + popping around partial
+  // commits caused `both modified` conflicts and kept stash entries when a
+  // later `git apply` failed (see binary-patch failures with many files).
+  // Unstaged changes simply survive the whole flow.
 
   const tempIndex = await Deno.makeTempFile();
   const removeTempIndex = async () => {
@@ -1605,18 +1590,19 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
   const rollback = async () => {
     if (committed > 0) {
       if (headSha) {
-        await runCommandCapture("git", ["reset", "--soft", headSha]);
+        const resetCode = await runCommandCapture("git", [
+          "reset",
+          "--soft",
+          headSha,
+        ]);
+        if (resetCode !== 0) {
+          await writeOutput(
+            "error",
+            "✗ Rollback failed: could not reset to the original HEAD. Check `git log` and `git status`.",
+          );
+        }
       } else {
         await runCommandCapture("git", ["update-ref", "-d", "HEAD"]);
-      }
-    }
-    if (stashed) {
-      const popCode = await runCommandCapture("git", ["stash", "pop"]);
-      if (popCode !== 0) {
-        await writeOutput(
-          "error",
-          "✗ Rollback incomplete: could not restore stashed unstaged changes. Check `git stash list`.",
-        );
       }
     }
     await removeTempIndex();
@@ -1767,16 +1753,6 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
     }
 
     await removeTempIndex();
-    if (stashed) {
-      const popCode = await runCommandCapture("git", ["stash", "pop"]);
-      if (popCode !== 0) {
-        await writeOutput(
-          "error",
-          "✗ Commits created but `git stash pop` failed. Check `git stash list` to restore unstaged changes.",
-        );
-        Deno.exit(popCode);
-      }
-    }
     if (ctx.args.push) {
       await $`git push`;
     }
