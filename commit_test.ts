@@ -14,6 +14,7 @@ import {
   extractTicketFromBranch,
   findInvalidArgs,
   hasNoVerifyFlag,
+  isBinaryDiffHeader,
   isLockFile,
   isTransientLLMError,
   KNOWN_BOOLEAN_LONG,
@@ -713,4 +714,89 @@ Deno.test("parseSplitResponse rejects non-JSON", () => {
     message = error instanceof Error ? error.message : String(error);
   }
   assertEquals(message.length > 0, true);
+});
+
+const BINARY_SAMPLE_DIFF = `diff --git a/a.txt b/a.txt
+index 1111111111111111111111111111111111111111..2222222222222222222222222222222222222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+ hello
++world
+diff --git a/blob.pyc b/blob.pyc
+new file mode 100644
+index 0000000000000000000000000000000000000000..366fd408dbff9779f4122ed55d2d5962304b8b9f
+GIT binary patch
+literal 8
+PcmZQzOv=nlEUE+m2%rLo
+
+literal 0
+HcmV?d00001
+
+diff --git a/c.txt b/c.txt
+new file mode 100644
+index 0000000000000000000000000000000000000000..aa39060d7ee7daa8833a5ad2354c3f77d35cac71
+--- /dev/null
++++ b/c.txt
+@@ -0,0 +1 @@
++newfile
+`;
+
+Deno.test("isBinaryDiffHeader detects binary patches", () => {
+  assertEquals(isBinaryDiffHeader("GIT binary patch\nliteral 1"), true);
+  assertEquals(isBinaryDiffHeader("Binary files a/b and b/b differ"), true);
+  assertEquals(isBinaryDiffHeader("@@ -1 +1 @@\n hello"), false);
+});
+
+Deno.test("parseDiffFiles keeps binary file as single atomic hunk", () => {
+  const blocks = parseDiffFiles(BINARY_SAMPLE_DIFF);
+  assertEquals(blocks.length, 3);
+  assertEquals(blocks[0].file, "a.txt");
+  assertEquals(blocks[0].hunks.length, 1);
+  assertEquals(blocks[1].file, "blob.pyc");
+  assertEquals(blocks[1].hunks.length, 1);
+  assertEquals(blocks[1].hunks[0].includes("GIT binary patch"), true);
+  assertEquals(blocks[2].file, "c.txt");
+});
+
+Deno.test("parseDiffFiles does not split @@ inside binary literal", () => {
+  const tricky = `diff --git a/blob.pyc b/blob.pyc
+new file mode 100644
+index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111
+GIT binary patch
+literal 4
+@@ fake-start
+abcd
+
+literal 0
+HcmV?d00001
+
+diff --git a/a.txt b/a.txt
+index 1111111111111111111111111111111111111111..2222222222222222222222222222222222222222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+ hello
++world
+`;
+  const blocks = parseDiffFiles(tricky);
+  assertEquals(blocks.length, 2);
+  assertEquals(blocks[0].file, "blob.pyc");
+  assertEquals(blocks[0].hunks.length, 1);
+  assertEquals(blocks[0].hunks[0].includes("@@ fake-start"), true);
+  assertEquals(blocks[1].file, "a.txt");
+});
+
+Deno.test("buildPatchForHunks roundtrips binary with trailing blank separator", () => {
+  const full = buildPatchForHunks(BINARY_SAMPLE_DIFF, [0, 1, 2]);
+  assertEquals(full.trim(), BINARY_SAMPLE_DIFF.trim());
+  // Binary block must be followed by a blank line, otherwise
+  // `git apply` fails with "corrupt binary patch".
+  assertEquals(full.includes("HcmV?d00001\n\ndiff --git a/c.txt"), true);
+  const textOnly = buildPatchForHunks(BINARY_SAMPLE_DIFF, [0]);
+  assertEquals(textOnly.includes("blob.pyc"), false);
+  assertEquals(textOnly.includes("+world"), true);
+  const binaryOnly = buildPatchForHunks(BINARY_SAMPLE_DIFF, [1]);
+  assertEquals(binaryOnly.includes("GIT binary patch"), true);
+  assertEquals(binaryOnly.includes("diff --git a/a.txt"), false);
 });

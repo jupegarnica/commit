@@ -446,6 +446,61 @@ async function runGitTempIndex(
   return code;
 }
 
+async function runGitTempIndexCapture(
+  tempIndex: string,
+  args: string[],
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const cmd = new Deno.Command("git", {
+    args,
+    env: { GIT_INDEX_FILE: tempIndex },
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout, stderr } = await cmd.output();
+  const decoder = new TextDecoder();
+  return {
+    code,
+    stdout: decoder.decode(stdout).trim(),
+    stderr: decoder.decode(stderr).trim(),
+  };
+}
+
+// Applies a cumulative patch to the temp index. Tries plain `apply --cached`
+// first (exact), then `--3way` as fallback for context shifts when many
+// files/hunks are involved. Returns an error detail string on failure.
+async function applyPatchToTempIndex(
+  tempIndex: string,
+  patchFile: string,
+): Promise<string | null> {
+  const check = await runGitTempIndexCapture(tempIndex, [
+    "apply",
+    "--cached",
+    "--check",
+    patchFile,
+  ]);
+  const direct = await runGitTempIndexCapture(tempIndex, [
+    "apply",
+    "--cached",
+    patchFile,
+  ]);
+  if (direct.code === 0) {
+    return null;
+  }
+  const fallback = await runGitTempIndexCapture(tempIndex, [
+    "apply",
+    "--cached",
+    "--3way",
+    patchFile,
+  ]);
+  if (fallback.code === 0) {
+    return null;
+  }
+  const detail = [check.stderr, direct.stderr, fallback.stderr]
+    .filter(Boolean)
+    .join("\n");
+  return detail || `git apply exited with ${direct.code}`;
+}
+
 export function buildRetryHint(messagePath: string): string {
   return `git commit --no-verify -F ${messagePath}`;
 }
@@ -504,6 +559,12 @@ function fileNameFromDiffHeader(diffHeader: string): string {
   return "unknown";
 }
 
+export function isBinaryDiffHeader(header: string): boolean {
+  return (
+    header.includes("GIT binary patch") || header.includes("Binary files ")
+  );
+}
+
 export function parseDiffFiles(diff: string): FileBlock[] {
   if (!diff.trim()) {
     return [];
@@ -515,6 +576,7 @@ export function parseDiffFiles(diff: string): FileBlock[] {
   let currentHunks: string[] = [];
   let currentHunk: string[] | null = null;
   let inDiff = false;
+  let blockIsBinary = false;
 
   const flushHunk = () => {
     if (currentHunk !== null) {
@@ -534,6 +596,18 @@ export function parseDiffFiles(diff: string): FileBlock[] {
     });
   };
 
+  const markBinaryIfNeeded = (line: string) => {
+    if (
+      line === "GIT binary patch" ||
+      line.startsWith("GIT binary patch") ||
+      line.startsWith("Binary files ") ||
+      line.startsWith("literal ") ||
+      line.startsWith("delta ")
+    ) {
+      blockIsBinary = true;
+    }
+  };
+
   for (const line of lines) {
     if (line.startsWith("diff --git ")) {
       flushBlock();
@@ -542,12 +616,16 @@ export function parseDiffFiles(diff: string): FileBlock[] {
       currentHunks = [];
       currentHunk = null;
       currentFile = fileNameFromDiffHeader(line);
+      blockIsBinary = false;
       continue;
     }
     if (!inDiff) {
       continue;
     }
-    if (line.startsWith("@@ ")) {
+    // Binary patches (GIT binary patch / Binary files ...) must stay atomic:
+    // their base85 body can contain lines starting with "@@ " which are not
+    // real hunk headers. Once a block is known binary, never split on @@.
+    if (!blockIsBinary && line.startsWith("@@ ")) {
       flushHunk();
       if (currentHunks.length === 0 && currentHunk === null) {
         // First hunk: everything collected so far beyond the diff line is header.
@@ -562,6 +640,7 @@ export function parseDiffFiles(diff: string): FileBlock[] {
       currentHunk.push(line);
     } else {
       currentHeader.push(line);
+      markBinaryIfNeeded(line);
       const recomputed = fileNameFromDiffHeader(currentHeader.join("\n"));
       if (recomputed !== "unknown") {
         currentFile = recomputed;
@@ -569,11 +648,15 @@ export function parseDiffFiles(diff: string): FileBlock[] {
     }
   }
   flushBlock();
-  // Files without hunks (e.g. binary) become a single unit so they are not lost.
+  // Files without hunks (e.g. binary, mode-only, rename) become a single unit
+  // so they are not lost. Preserve the body exactly (including the trailing
+  // blank line that GIT binary patches require as separator); only use trim()
+  // to test emptiness, never to store.
   for (const block of blocks) {
     if (block.hunks.length === 0) {
-      const body = block.header.split("\n").slice(1).join("\n").trim();
-      if (body) {
+      const rawBody = block.header.split("\n").slice(1).join("\n");
+      if (rawBody.trim()) {
+        const body = rawBody.replace(/^\n+/, "");
         block.hunks = [body];
         block.header = block.header.split("\n")[0];
       }
@@ -1444,7 +1527,7 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
   );
 
   const fullDiff =
-    await daxSilent`git diff --unified=${ctx.unified} --cached -- .`;
+    await daxSilent`git diff --binary --full-index --no-color --no-ext-diff --unified=${ctx.unified} --cached -- .`;
   const lockPatch = extractLockPatch(fullDiff);
 
   // Dry run: print one message per group, change nothing.
@@ -1557,18 +1640,37 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
         );
       }
       const patchFile = await Deno.makeTempFile();
+      let applyError: string | null = null;
       try {
         await Deno.writeTextFile(patchFile, cumulativePatch);
-        if (await runGitTempIndex(tempIndex, ["apply", "--cached", patchFile]) !== 0) {
+        applyError = await applyPatchToTempIndex(tempIndex, patchFile);
+        if (applyError) {
+          // Keep the failing patch around for debugging instead of deleting it.
+          const debugPatch = `${patchFile}.failed-${i + 1}-of-${total}.patch`;
+          try {
+            await Deno.copyFile(patchFile, debugPatch);
+          } catch (_copyError) {
+            // Best-effort.
+          }
+          const groupFiles = [
+            ...new Set(
+              cumulative.map((hunkIndex) => hunks[hunkIndex]?.file ?? ""),
+            ),
+          ].filter(Boolean).slice(0, 10);
           throw new MultiFailedError(
-            `Could not stage changes for commit ${i + 1}/${total} (apply failed).`,
+            `Could not stage changes for commit ${i + 1}/${total} (apply failed${
+              groupFiles.length ? ` for: ${groupFiles.join(", ")}` : ""
+            }). Patch kept at: ${debugPatch}\n${applyError}`,
           );
         }
       } finally {
-        try {
-          await Deno.remove(patchFile);
-        } catch (_error) {
-          // Best-effort cleanup.
+        // Only remove the original temp file; the .failed copy (if any) stays.
+        if (!applyError) {
+          try {
+            await Deno.remove(patchFile);
+          } catch (_error) {
+            // Best-effort cleanup.
+          }
         }
       }
 
@@ -1987,7 +2089,7 @@ Allowlisted git commit options (any other option must go after --):
   }
   await startOutputTimer("git diff");
   let diff =
-    await daxSilent`git diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
+    await daxSilent`git diff --binary --full-index --no-color --no-ext-diff --unified=${unified} --staged -- . ':(exclude)*.lock'`;
   // Added: append last commit diff if --amend flag is provided
   if (args.amend) {
     const lastCommitDiff =
