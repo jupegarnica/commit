@@ -13,6 +13,7 @@ import {
   extractLockPatch,
   extractTicketFromBranch,
   findInvalidArgs,
+  formatSplitPlan,
   hasNoVerifyFlag,
   isBinaryDiffHeader,
   isLockFile,
@@ -643,6 +644,33 @@ Deno.test("isLockFile matches lock suffix", () => {
   assertEquals(isLockFile("deno.lock"), true);
   assertEquals(isLockFile("sub/dir/package.lock"), true);
   assertEquals(isLockFile("foo.ts"), false);
+});
+
+Deno.test("formatSplitPlan lists each planned commit with its files", () => {
+  const hunks = splitDiffToHunks(MULTI_SAMPLE_DIFF);
+  const plan = formatSplitPlan(
+    [
+      { hunks: [0, 1], reason: "foo feature" },
+      { hunks: [2], reason: "bar fix" },
+    ],
+    hunks,
+  );
+  assertEquals(
+    plan,
+    [
+      "Planned commits (2):",
+      "  1/2 · foo feature (2 hunks)",
+      "      - foo.ts",
+      "  2/2 · bar fix (1 hunk)",
+      "      - bar.ts",
+    ].join("\n"),
+  );
+});
+
+Deno.test("formatSplitPlan falls back when a group has no reason", () => {
+  const hunks = splitDiffToHunks(MULTI_SAMPLE_DIFF);
+  const plan = formatSplitPlan([{ hunks: [0], reason: "" }], hunks);
+  assertEquals(plan.includes("1/1 · no reason"), true);
 });
 
 Deno.test("buildSplitPrompt numbers every hunk", () => {

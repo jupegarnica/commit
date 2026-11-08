@@ -816,6 +816,35 @@ export function parseSplitResponse(
   return groups;
 }
 
+// Renders the planned split as a readable list so the user can see which
+// commits --multi is about to create before the per-commit flow starts.
+export function formatSplitPlan(
+  groups: SplitGroup[],
+  hunks: DiffHunk[],
+): string {
+  const total = groups.length;
+  const lines: string[] = [`Planned commits (${total}):`];
+  groups.forEach((group, i) => {
+    const files = [
+      ...new Set(
+        group.hunks
+          .map((hunkIndex) => hunks[hunkIndex]?.file)
+          .filter((file): file is string => Boolean(file)),
+      ),
+    ];
+    const hunkCount = group.hunks.length;
+    lines.push(
+      `  ${i + 1}/${total} · ${group.reason || "no reason"} (${hunkCount} hunk${
+        hunkCount === 1 ? "" : "s"
+      })`,
+    );
+    for (const file of files) {
+      lines.push(`      - ${file}`);
+    }
+  });
+  return lines.join("\n");
+}
+
 export const DEFAULT_COMMIT_STYLE =
   "conventional commits: use a type prefix — 'feat:' for new features where the code behavior changes, 'fix:' for bug fixes where the code behavior changes, 'refactor:' for code refactoring where the code behavior does not change, 'docs:' for documentation changes, 'style:' for changes that do not affect the meaning of the code (white-space, formatting, missing semi-colons, etc), 'test:' for adding tests, 'chore:' for changes to the build process or auxiliary tools and libraries such as documentation generation.";
 
@@ -1525,6 +1554,7 @@ async function runMultiCommitFlow(ctx: MultiFlowContext): Promise<boolean> {
     "info",
     `ℹ️  Splitting staged changes into ${hl(String(total))} commits.`,
   );
+  await writeOutput("info", formatSplitPlan(groups, hunks));
 
   const fullDiff =
     await daxSilent`git diff --binary --full-index --no-color --no-ext-diff --unified=${ctx.unified} --cached -- .`;
