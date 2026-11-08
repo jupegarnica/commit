@@ -73,10 +73,11 @@ commit [OPTIONS]
 - `--multi`: Splits staged changes into multiple commits by responsibility
   (hunk level; the same file can go in several commits). Only staged changes
   are used. The LLM decides the split; if a single commit is enough, the
-  normal flow runs unchanged. Otherwise one normal flow runs per commit with a
-  `Commit i/N` confirmation button. Cancelling rolls back the partial commits
-  and restores the initial stage. `--push` only runs if all commits succeed.
-  Cannot be combined with `--amend`.
+  normal flow runs unchanged. Otherwise the planned commits (reason and files)
+  are listed before the first one, and then one normal flow runs per commit
+  with a `Commit i/N` confirmation button. Cancelling rolls back the partial
+  commits and restores the initial stage. `--push` only runs if all commits
+  succeed. Cannot be combined with `--amend`.
 - `--debug`: Enables debug mode, which will print additional information to the
   console.
 - `--help`: Prints the help message.

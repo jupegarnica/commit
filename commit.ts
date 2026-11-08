@@ -1912,7 +1912,7 @@ To forward any other option to git commit, pass it after --.
 --commit-style <style>: Extra style instructions for the commit message (e.g. "imperative mood"). Defaults to conventional commits rules; overrides the saved config.
 --hint <text>: Additional context to guide the commit message generation (e.g. "fixes #123"). Overrides the saved config (set it with --config).
 --body: Also generate a body with bullet points after the subject line.
---multi: Split staged changes into multiple commits by responsibility. Only staged changes are used; the split is decided by the LLM (hunk level, same file can go in several commits). One flow per commit with "Commit i/N" confirmation. Cancelling rolls back partial commits and restores the initial stage. Push (with --push) only runs if all commits succeed.
+--multi: Split staged changes into multiple commits by responsibility. Only staged changes are used; the split is decided by the LLM (hunk level, same file can go in several commits). The planned commits (reason and files) are listed before the first commit. One flow per commit with "Commit i/N" confirmation. Cancelling rolls back partial commits and restores the initial stage. Push (with --push) only runs if all commits succeed.
 -D, --debug: Enables debug mode, which renders additional diagnostic information.
 -H, --help: Prints the help message.
 -V, --version: Prints the version number.
